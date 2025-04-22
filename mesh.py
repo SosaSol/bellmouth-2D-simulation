@@ -1,8 +1,23 @@
-import gmsh
-import sys
-import multiprocessing
-import argparse
+# standard library
 import os
+import sys
+import argparse
+import multiprocessing
+from pathlib import Path
+import logging
+
+# third‑party
+import gmsh
+
+# project constants
+MM = 1e-3
+MODULE_WIDTH = 240.0e-3  # m
+GAP = 2.5e-3  # m
+OPENFOAM_BASHRC = "/usr/lib/openfoam/openfoam2412/etc/bashrc"
+
+SAVE_ROOT = Path.cwd()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s")
 
 # -----------------------------
 # Parser
@@ -36,7 +51,9 @@ def parse_args():
 # -----------------------------
 # Geometry Helper Functions
 # -----------------------------
-def compute_geometry_parameters(Mw, Mb, Kx, Ky):
+def compute_geometry_parameters(
+        Mw: int, Mb: int, Kx: float, Ky: float
+        ) -> tuple[float, float, float, float]:
     """
     Compute key geometry parameters based on input multipliers.
     Returns:
@@ -46,11 +63,8 @@ def compute_geometry_parameters(Mw, Mb, Kx, Ky):
         b: semi-minor axis (half bellmouth height)
     """
     # Di and Db are calculated as:
-    #   N * 240 mm + (N - 1) * 2.5 mm, converted to meters
-    #   where N is Mw or Mb respectively
-
-    Di = Mw * 0.240 + (Mw - 1) * 0.0025  # inlet width in meters
-    Db = Mb * 0.240 + (Mb - 1) * 0.0025  # bellmouth reference width in meters
+    Di = Mw * MODULE_WIDTH + (Mw - 1) * GAP  # inlet width in meters
+    Db = Mb * MODULE_WIDTH + (Mb - 1) * GAP  # bellmouth reference width in meters
 
     # Ensure a >= b for ellipse definition
     a_raw = Db / 2
@@ -60,29 +74,33 @@ def compute_geometry_parameters(Mw, Mb, Kx, Ky):
     return Di, Db, a, b
 
 
-def add_point(x, y, z=0):
+def add_point(x: float, y:float, z:float = 0) -> int:
     """Add a point in the OCC geometry kernel."""
     return gmsh.model.occ.addPoint(x, y, z)
 
 
-def add_line(p1, p2):
+def add_line(p1:int, p2:int) -> int:
     """Add a straight line between two points."""
     return gmsh.model.occ.addLine(p1, p2)
 
 
-def add_circle_arc(p1, center, p2):
+def add_circle_arc(p1:int, center:int, p2:int) -> int:
     """Add a circular arc from p1 to p2 around center."""
     return gmsh.model.occ.addCircleArc(p1, center, p2)
 
 
-def add_ellipse_arc(p1, center, major, p2):
+def add_ellipse_arc(p1:int, center:int, major:int, p2:int) -> int:
     """Add an elliptical arc from p1 to p2 using major axis vector."""
     return gmsh.model.occ.addEllipseArc(p1, center, major, p2)
 
 # -----------------------------
 # Build 2D Geometry
 # -----------------------------
-def create_geometry(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax):
+def create_geometry(
+        Mw:int, Mb:int, Kx: float, Ky:float, 
+        r:float, t:float, L:float, 
+        xmin:float, ymin:float, xmax:float, ymax:float
+        ) -> tuple[int, list[int], list[int]]:
     """
     Build the parametric 2D bellmouth inlet geometry.
     Returns:
@@ -90,7 +108,7 @@ def create_geometry(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax):
         curve_tags: list of all curve tags in order
         edge_points: two point tags for boundary layer 'fan'
     """
-    print("Info    : Building geometry...")
+    logging.info("Building geometry...")
 
     # Compute parameters
     Di, Db, a, b = compute_geometry_parameters(Mw, Mb, Kx, Ky)
@@ -148,7 +166,7 @@ def create_geometry(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax):
 # -----------------------------
 # Boundary Layer
 # -----------------------------
-def apply_boundary_layer(curve_tags, edge_points, bl_thickness=3e-3):
+def apply_boundary_layer(curve_tags:list, edge_points:list, bl_thickness:float=3e-3):
     """
     Apply a structured boundary layer on selected curves and fan points.
     """
@@ -166,7 +184,7 @@ def apply_boundary_layer(curve_tags, edge_points, bl_thickness=3e-3):
 # -----------------------------
 # Mesh Refinement
 # -----------------------------
-def refine_mesh(curve_tags, xmin, xmax, ymin, ymax):
+def refine_mesh(curve_tags:list, xmin:float, xmax:float, ymin:float, ymax:float):
     """
     Add distance + threshold + box fields and combine for smooth grading.
     """
@@ -204,7 +222,7 @@ def refine_mesh(curve_tags, xmin, xmax, ymin, ymax):
 # -----------------------------
 # Extrusion and Physical Groups
 # -----------------------------
-def extrude_and_group(surface):
+def extrude_and_group(surface:int):
     """
     Extrude the 2D surface into a thin 3D volume by one element,
     then define physical groups for CFD boundaries and volume.
@@ -234,43 +252,72 @@ def extrude_and_group(surface):
 # -----------------------------
 # Save Mesh
 # -----------------------------
-def save_mesh(fname, save_path):
-    """
-    Save the final mesh with a filename encoding key parameters
-    in the specified directory.
-    """
-    os.makedirs(save_path, exist_ok=True)
-
-    msh_name = os.path.join(save_path, f"{fname}.msh")
-    gmsh.write(msh_name)
-
-    print(f"Info    : Saving mesh to {save_path}")
-    print(f"Mesh saved to {msh_name}")
-
+def save_mesh(fname:str , save_path: Path):
+    save_path.mkdir(parents=True, exist_ok=True)
+    msh = save_path / f"{fname}.msh"
+    gmsh.write(str(msh))
+    logging.info(f"mesh saved to {msh}")
 
 # -----------------------------
 # Print Information
 # -----------------------------    
-def print_info(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax, nt, fname):
+def print_info(
+        Mw:int, Mb:int, Kx:float, Ky:float, 
+        r:float, t:float, L:float, 
+        xmin:float, ymin:float, xmax:float, ymax:float, 
+        nt: int, fname:str):
     """
     Print the parameters used for mesh generation.
     """
-    print("Info    : Geometry parameters:")
-    print(f"          - Mesh tag suffix            : {fname}")
-    print(f"          - WindShaper modules         : {Mw}")
-    print(f"          - Bellmouth reference modules: {Mb}")
-    print(f"          - Ellipse scaling (Kx, Ky)   : {Kx:.2f}, {Ky:.2f}")
-    print(f"          - Radius of curvature (mm)   : {r * 1e3:.1f}")
-    print(f"          - Wall thickness (mm)        : {t * 1e3:.1f}")
-    print(f"          - Straight section len (mm)  : {L * 1e3:.1f}")
+    logging.info("Geometry parameters:")
+    logging.info(f"          - Mesh tag suffix            : {fname}")
+    logging.info(f"          - WindShaper modules         : {Mw}")
+    logging.info(f"          - Bellmouth reference modules: {Mb}")
+    logging.info(f"          - Ellipse scaling (Kx, Ky)   : {Kx:.2f}, {Ky:.2f}")
+    logging.info(f"          - Radius of curvature (mm)   : {r * 1e3:.1f}")
+    logging.info(f"          - Wall thickness (mm)        : {t * 1e3:.1f}")
+    logging.info(f"          - Straight section len (mm)  : {L * 1e3:.1f}")
 
-    print(f"Info    : Domain bounds -> X: [{xmin}, {xmax}], Y: [{ymin}, {ymax}]")
-    print(f"Info    : Using {nt} threads for GMSH.")
+    logging.info(f"Domain bounds -> X: [{xmin}, {xmax}], Y: [{ymin}, {ymax}]")
+    logging.info(f"Using {nt} threads for GMSH.")
+
+
+# -----------------------------
+# Validate arguments
+# -----------------------------
+def validate_args(args):
+    """
+    Validate input arguments and raise ValueError for invalid entries.
+    """
+    if args.Mw <= 0:
+        raise ValueError("Mw (Number of wires) must be greater than 0.")
+    if args.Mb <= 0:
+        raise ValueError("Mb (Bellmouth multiplier) must be greater than 0.")
+    if not (0 < args.Kx <= 1):
+        raise ValueError("Kx must be in the range (0, 1].")
+    if not (0 < args.Ky <= 1):
+        raise ValueError("Ky must be in the range (0, 1].")
+    if args.r <= 0:
+        raise ValueError("Radius r must be positive.")
+    if args.t <= 0:
+        raise ValueError("Wall thickness t must be positive.")
+    if args.L <= 0:
+        raise ValueError("Length L must be positive.")
+    if args.xmin >= args.xmax:
+        raise ValueError("xmin must be less than xmax.")
+    if args.ymin >= args.ymax:
+        raise ValueError("ymin must be less than ymax.")
+    if args.nt <= 0:
+        raise ValueError("Number of threads (nt) must be positive.")
+
 
 # -----------------------------
 # Main Execution
 # -----------------------------
-def main(Mw=12, Mb=12, Kx=0.33, Ky=0.33, r=10e-3, t=5e-3, L=0.3, xmin=0, ymin=0, xmax=25, ymax=25, nt=10):
+def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33, 
+         r:float=10e-3, t:float=5e-3, L:float=0.3, 
+         xmin:float=0, ymin:float=0, xmax:float=25, ymax:float=25,
+        nt:int=10):
     """
     Main function to generate the mesh using GMSH.
     """
@@ -278,7 +325,7 @@ def main(Mw=12, Mb=12, Kx=0.33, Ky=0.33, r=10e-3, t=5e-3, L=0.3, xmin=0, ymin=0,
     # Define name and path for mesh file
     fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
     save_path = os.path.join(os.getcwd(), fname, "constant", "triSurface")
-    # print(f"Info    : Save path: {save_path}")
+    # logging.info(f"Save path: {save_path}")
     
 
     # Initialize and add model
@@ -314,8 +361,17 @@ def main(Mw=12, Mb=12, Kx=0.33, Ky=0.33, r=10e-3, t=5e-3, L=0.3, xmin=0, ymin=0,
 
 # -----------------------------
 # Entry point for script execution
-if __name__ == "__main__":
+def run():
     args = parse_args()
+    try:
+        validate_args(args)
+    except ValueError as e:
+        logging.error(str(e))
+        sys.exit(1)
+    
     main(args.Mw, args.Mb, args.Kx, args.Ky, args.r, args.t,
          args.L, args.xmin, args.ymin, args.xmax, args.ymax,
          args.nt)
+
+if __name__ == "__main__":
+    run()
