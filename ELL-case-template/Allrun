@@ -1,0 +1,18 @@
+# Run mesh conversion
+gmshToFoam gmshToFoam constant/triSurface/*.msh | tee log.gmshToFoam
+
+# check Mesh
+checkMesh | tee log.checkMesh
+
+# Create .foam
+touch foam.foam
+
+# Run simulation
+simpleFoam | tee log.simpleFoam
+
+# Post-processing
+postProcess -func "patchIntegrate(name=outlet,U)"
+postProcess -func "patchAverage(name=inlet,p)"
+postProcess -func "patchAverage(name=outlet,p)"
+
+#------------------------------------------------------------------------------
