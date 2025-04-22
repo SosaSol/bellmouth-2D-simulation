@@ -57,16 +57,16 @@ Key features include:
    git clone https://github.com/yourusername/bellmouth-2d-simulation.git
    cd bellmouth-2d-simulation
    ```
-   
+
 2. Set up a Python environment (optional but recommended):
-   
+
    ```bash
    conda create -n windshape python=3.10
    conda activate windshape
    ```
 
 3. Install dependencies:
-   
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -80,11 +80,12 @@ Key features include:
    ```
 
 ## Usage
+
 From Windows terminal (PowerShell or CMD), run:
 
-   ```bash
-   python run.py
-   ```
+```bash
+python run.py
+```
 
 This script will:
 
@@ -100,14 +101,33 @@ You can customize geometric parameters and loop ranges in run.py.
 ## Project Structure
 
 ```php
-bellmouth-2d-simulation/
-├── mesh.py              # Gmsh geometry and mesh generator
-├── run.py               # Main control script (simulation + post-processing)
-├── ELL-case-template/        # OpenFOAM case template
-├── outputs/                  # Optional directory for results
-├── requirements.txt
+your_project/
+│
+├── configs/                # YAML input files
+│   ├── base_config.yaml    # Base config 
+│   ├── sweep_config.yaml   # Seep config
+│   └── presets/            # Optional: different config templates
+│
+├── scripts/                # All core scripts
+│   ├── run_simulation.py   # Runs one simulation from config
+│   ├── sweep_runner.py     # Expands sweeps, runs all cases
+│   └── utils/              # Helpers: file IO, config parsing, mesh gen
+│       ├── config_utils.py
+│       └── mesh_utils.py
+│
+├── outputs/                # Simulation results
+│   └── Mw_0.04_Mb_0.1/     # One folder per simulation run
+│       ├── result.vtk
+│       ├── logs/
+│       └── config_used.yaml
+│
+├── logs/                   # General logs or sweep-wide logs
+│
+├── environment.yml         # Conda env (optional)
 └── README.md
+
 ```
+
 ---
 
 ## Contributing
@@ -115,9 +135,9 @@ bellmouth-2d-simulation/
 Contributions are welcome! To propose a change:
 
 1. Fork the repository
-2. Create a new branch (```git checkout -b feature/new-feature```)
-3. Commit your changes (```git commit -m 'Add new feature'```)
-4. Push to the branch (```git push origin feature/new-feature```)
+2. Create a new branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -m 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
 5. Open a Pull Request
 
 Please ensure code adheres to project conventions and is thoroughly tested.
@@ -125,6 +145,7 @@ Please ensure code adheres to project conventions and is thoroughly tested.
 ---
 
 ## License
+
 This project is licensed under SOLIM's LICENSE
 
 ---

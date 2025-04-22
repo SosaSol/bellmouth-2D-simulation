@@ -1,0 +1,31 @@
+simulation:
+  name: default_run
+  # output_dir: outputs/ELL-6-6-33-33-10-5   # Automatically generated from params
+  save_interval: 100
+  total_iterations: 5000
+
+geometry:
+  Mw:
+    sweep: [2, 4, 6, 8, 10, 12] # Number of Modules
+  Mb:
+    sweep: [2, 4, 6, 8, 10, 12] # Bellmouth multiplier
+  Kx: 0.33 # X-axis ellipse scale
+  Ky: 0.33 # Y-axis ellipse scale
+  r: 0.010 # Radius of curvature (in meters)
+  t: 0.005 # Wall thickness (in meters)
+  L: 0.5 # Length of straight section (in meters)
+
+  # Domain Bounds (in meters)
+  xmin: 0
+  ymin: 0
+  xmax: 25
+  ymax: 25
+
+boundary_conditions:
+  outlet_pressure: 100.0 # Outlet pressure in Pascals
+
+numerics:
+  solver: direct
+  p_tolerance: 1e-6
+  U_tolerance: 1e-6
+  max_iterations: 1000
