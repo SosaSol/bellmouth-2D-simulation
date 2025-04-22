@@ -15,19 +15,10 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 2 -1 0 0 0 0];
-
 internalField   uniform 0;
 
 boundaryField
 {
-    #includeEtc "caseDicts/setConstraintTypes"
-
-    frontAndBack
-    {
-        type            calculated;
-        value           uniform 0;
-    }
-
     inlet
     {
         type            calculated;
@@ -40,24 +31,21 @@ boundaryField
         value           uniform 0;
     }
 
-    lowerWall
-    {
-        type            nutkWallFunction;
-        value           uniform 0;
-    }
-
-    upperWall
+    wall
     {
         type            calculated;
         value           uniform 0;
     }
 
-    motorBikeGroup
+    symmetry
     {
-        type            nutkWallFunction;
-        value           uniform 0;
+        type            symmetryPlane;
+    }
+
+    frontAndBack
+    {
+        type            empty;
     }
 }
-
 
 // ************************************************************************* //
