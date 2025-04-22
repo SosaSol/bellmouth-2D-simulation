@@ -45,8 +45,13 @@ def compute_geometry_parameters(Mw, Mb, Kx, Ky):
         a: semi-major axis (half bellmouth width)
         b: semi-minor axis (half bellmouth height)
     """
-    Di = 242.09e-3 * Mw + 3.5455e-3 # inlet width
-    Db = 242.09e-3 * Mb + 3.5455e-3 # bellmouth reference width
+    # Di and Db are calculated as:
+    #   N * 240 mm + (N - 1) * 2.5 mm, converted to meters
+    #   where N is Mw or Mb respectively
+
+    Di = Mw * 0.240 + (Mw - 1) * 0.0025  # inlet width in meters
+    Db = Mb * 0.240 + (Mb - 1) * 0.0025  # bellmouth reference width in meters
+
     # Ensure a >= b for ellipse definition
     a_raw = Db / 2
     b_raw = Ky * Db / 2
@@ -234,14 +239,11 @@ def save_mesh(fname, save_path):
     Save the final mesh with a filename encoding key parameters
     in the specified directory.
     """
-    # Ensure the output directory exists
     os.makedirs(save_path, exist_ok=True)
 
-    # Construct full path
     msh_name = os.path.join(save_path, f"{fname}.msh")
-    
-    # Save the mesh
     gmsh.write(msh_name)
+
     print(f"Info    : Saving mesh to {save_path}")
     print(f"Mesh saved to {msh_name}")
 
@@ -275,8 +277,9 @@ def main(Mw=12, Mb=12, Kx=0.33, Ky=0.33, r=10e-3, t=5e-3, L=0.3, xmin=0, ymin=0,
 
     # Define name and path for mesh file
     fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
-    save_path = r"\\wsl.localhost\Ubuntu\home\solim\OpenFOAM\solim-v2412\run\bellmouth_2D\{}\constant\triSurface".format(fname)
+    save_path = os.path.join(os.getcwd(), fname, "constant", "triSurface")
     # print(f"Info    : Save path: {save_path}")
+    
 
     # Initialize and add model
     gmsh.initialize()

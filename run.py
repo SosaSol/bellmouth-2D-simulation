@@ -19,7 +19,7 @@ MW_RANGE = range(2, 13)
 MB_RANGE = range(2, 13)
 
 # WSL Paths
-WSL_BASE = "/home/solim/OpenFOAM/solim-v2412/run/bellmouth_2D"
+WSL_BASE = str(Path(__file__).parent.resolve())
 CASE_TEMPLATE = "ELL-case-template"
 
 def wsl_path(*parts):
