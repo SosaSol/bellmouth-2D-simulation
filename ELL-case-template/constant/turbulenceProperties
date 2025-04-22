@@ -5,45 +5,24 @@
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
-
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       dictionary;
-    object      surfaceFeatureExtractDict;
+    object      turbulenceProperties;
 }
-
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-inlet.stl
-{
-    extractionMethod    extractFromSurface;
-    includedAngle       150;
-}
+simulationType      RAS;
 
-outlet.stl
+RAS
 {
-    extractionMethod    extractFromSurface;
-    includedAngle       150;
-}
+    RASModel        kOmegaSST;
 
-symmetry_bottom.stl
-{
-    extractionMethod    extractFromSurface;
-    includedAngle       150;
-}
+    turbulence      on;
 
-wall_bellmouth.stl
-{
-    extractionMethod    extractFromSurface;
-    includedAngle       150;
-}
-
-FrontAndBackPlanes.stl
-{
-    extractionMethod    extractFromSurface;
-    includedAngle       150;
+    printCoeffs     on;
 }
 
 

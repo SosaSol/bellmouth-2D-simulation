@@ -20,6 +20,14 @@ internalField   uniform 0;
 
 boundaryField
 {
+    #includeEtc "caseDicts/setConstraintTypes"
+
+    frontAndBack
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
     inlet
     {
         type            calculated;
@@ -32,20 +40,22 @@ boundaryField
         value           uniform 0;
     }
 
-    "(lowerWallStartup|upperWallStartup)"
+    lowerWall
     {
-        type            symmetryPlane;
-    }
-
-    "(upperWall|lowerWall)"
-    {
-        type            nutUBlendedWallFunction;
+        type            nutkWallFunction;
         value           uniform 0;
     }
 
-    "(front|back)"
+    upperWall
     {
-        type            empty;
+        type            calculated;
+        value           uniform 0;
+    }
+
+    motorBikeGroup
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
     }
 }
 

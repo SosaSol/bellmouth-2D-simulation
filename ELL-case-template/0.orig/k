@@ -14,38 +14,39 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+#include        "include/initialConditions"
+
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform 1.09e-3; // 0.061%
+internalField   uniform $turbulentKE;
 
 boundaryField
 {
-    inlet
-    {
-        type            fixedValue;
-        value           $internalField;
-    }
+    #includeEtc "caseDicts/setConstraintTypes"
+
+    //- Define inlet conditions
+    #include "include/fixedInlet"
 
     outlet
     {
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
     }
 
-    "(lowerWallStartup|upperWallStartup)"
-    {
-        type            symmetryPlane;
-    }
-
-    "(upperWall|lowerWall)"
+    upperWall
     {
         type            kqRWallFunction;
         value           $internalField;
     }
 
-    "(front|back)"
+    "motorBikeGroup"
     {
-        type            empty;
+        type            kqRWallFunction;
+        value           $internalField;
     }
+
+    #include "include/frontBackUpperPatches"
 }
 
 

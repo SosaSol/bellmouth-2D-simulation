@@ -2,7 +2,8 @@
 
 
 # 1. Create the mesh
-cartesian2DMesh # 2D mesh
+# cartesian2DMesh # 2D mesh
+# we now use gmsh
 # flattenMesh # Flatten the mesh for better visualization
 
 # foamMeshToFluent

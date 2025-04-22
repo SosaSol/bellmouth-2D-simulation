@@ -14,38 +14,38 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+#include        "include/initialConditions"
+
 dimensions      [0 0 -1 0 0 0 0];
 
-internalField   uniform 181728;
+internalField   uniform $turbulentOmega;
 
 boundaryField
 {
-    inlet
-    {
-        type            fixedValue;
-        value           $internalField;
-    }
+    #includeEtc "caseDicts/setConstraintTypes"
+
+    #include "include/fixedInlet"
 
     outlet
     {
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
     }
 
-    "(lowerWallStartup|upperWallStartup)"
-    {
-        type            symmetryPlane;
-    }
-
-    "(upperWall|lowerWall)"
+    upperWall
     {
         type            omegaWallFunction;
         value           $internalField;
     }
 
-    "(front|back)"
+    "motorBikeGroup"
     {
-        type            empty;
+        type            omegaWallFunction;
+        value           $internalField;
     }
+
+    #include "include/frontBackUpperPatches"
 }
 
 
