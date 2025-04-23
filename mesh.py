@@ -5,6 +5,8 @@ import argparse
 import multiprocessing
 from pathlib import Path
 import logging
+import math
+from scipy.optimize import fsolve
 
 # third‑party
 import gmsh
@@ -46,6 +48,7 @@ def parse_args():
     parser.add_argument("--ymax", type=float, default=25, help="Y max (in meters)")
 
     parser.add_argument("--nt", type=int, default=10, help="Number of threads for GMSH")
+    parser.add_argument("--sd", type=str, default=None, help="Save directory")
     return parser.parse_args()
 
 # -----------------------------
@@ -166,6 +169,54 @@ def create_geometry(
 # -----------------------------
 # Boundary Layer
 # -----------------------------
+
+def layers_needed_numeric(y1, delta, r):
+    def func(N):
+        return y1 * (1 - r**N) / (1 - r) - delta
+    N_guess = 20
+    N_sol = fsolve(func, N_guess)
+    return math.ceil(N_sol[0])
+
+def compute_boundary_layer_info(U_inf: float, nu: float, x:float, y_plus:float=0.95, expansion_ratio:float=1.05):
+    """
+    Computes boundary layer parameters for a turbulent boundary layer over a flat plate.
+    
+    Parameters:
+    - U_inf: Freestream velocity [m/s]
+    - nu: Kinematic viscosity [m^2/s]
+    - x: Distance from leading edge [m] (for estimating Cf and delta99)
+    - y_plus: Desired dimensionless first cell height
+    - growth_rate: Geometric growth rate between layers
+    - n_layers: Number of boundary layer layers
+    
+    Returns:
+    - Dictionary with y1, delta99, total height, and layer details
+    """
+        
+    if expansion_ratio <= 1.0:
+        raise ValueError("Expansion ratio must be > 1.0")
+
+    
+    Re_x = U_inf * x / nu               # Reynolds number based on x 
+    Cf = 0.026 / Re_x**0.2              # Skin friction coefficient for turbulent boundary layer (empirical)
+    u_tau = U_inf * math.sqrt(Cf / 2)   # Friction velocity
+    y1 = y_plus * nu / u_tau            # First cell height for desired y+
+    delta99 = 0.37 * x / Re_x**0.2      # Boundary layer thickness
+    
+    # Compute required number of layers
+    n_layers = math.log(1 + ((expansion_ratio - 1) * delta99 / y1)) / math.log(expansion_ratio)
+    n_layers = math.ceil(n_layers)          # Round up to nearest integer
+
+    return {
+        "Re_x": Re_x,
+        "Cf": Cf,
+        "u_tau": u_tau,
+        "y1": y1,
+        "delta99": delta99,
+        "n_layers": n_layers,
+        "expansion_ratio": expansion_ratio
+    }
+
 def apply_boundary_layer(curve_tags:list, edge_points:list, bl_thickness:float=3e-3):
     """
     Apply a structured boundary layer on selected curves and fan points.
@@ -317,14 +368,14 @@ def validate_args(args):
 def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33, 
          r:float=10e-3, t:float=5e-3, L:float=0.3, 
          xmin:float=0, ymin:float=0, xmax:float=25, ymax:float=25,
-        nt:int=10):
+        nt:int=10, sd:str=None):
     """
     Main function to generate the mesh using GMSH.
     """
 
     # Define name and path for mesh file
     fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
-    save_path = os.path.join(os.getcwd(), fname, "constant", "triSurface")
+    save_path = Path(sd) if sd else Path("meshes")
     # logging.info(f"Save path: {save_path}")
     
 
@@ -371,7 +422,7 @@ def run():
     
     main(args.Mw, args.Mb, args.Kx, args.Ky, args.r, args.t,
          args.L, args.xmin, args.ymin, args.xmax, args.ymax,
-         args.nt)
+         args.nt, args.sd)
 
 if __name__ == "__main__":
     run()

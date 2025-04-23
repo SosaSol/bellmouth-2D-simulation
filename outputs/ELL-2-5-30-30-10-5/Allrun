@@ -1,0 +1,81 @@
+#!/bin/bash
+
+#------------------------------------------------------------------------------
+# OpenFOAM Mesh Conversion, Simulation, and Post-processing Script
+# Version: 1.0
+# Description: This script automates the process of converting mesh, running
+#              OpenFOAM simulations, and performing post-processing tasks.
+#              It also includes a post-processing step to update boundary conditions.
+#
+# Dependencies:
+#   - OpenFOAM installed and properly set up
+#   - Python with required packages (e.g., pathlib)
+#------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Mesh Conversion
+# -----------------------------------------------------------------------------
+
+echo "[INFO] Converting mesh file to OpenFOAM format"
+
+# Identify the mesh file (.msh) in the constant/triSurface directory.
+# Ensure there is only one mesh file present to avoid errors.
+msh_file=$(ls constant/triSurface/*.msh | head -n 1)
+
+# If more than one file is detected, you might need to handle the case
+# where multiple .msh files exist.
+gmshToFoam "$msh_file" | tee log.gmshToFoam
+
+# -----------------------------------------------------------------------------
+# Update Boundary Conditions
+# -----------------------------------------------------------------------------
+
+echo "[INFO] Updating boundary conditions"
+
+# Call the Python script to update boundary conditions in the mesh.
+python3 ../../updateBoundaryConditions.py
+
+# -----------------------------------------------------------------------------
+# Mesh Validation
+# -----------------------------------------------------------------------------
+
+echo "[INFO] Checking mesh"
+
+# Run checkMesh to ensure the mesh is valid.
+# The results are saved in the log file log.checkMesh.
+checkMesh | tee log.checkMesh
+
+# -----------------------------------------------------------------------------
+# Create foam.foam File
+# -----------------------------------------------------------------------------
+
+echo "[INFO] Creating foam.foam file"
+
+# Create an empty foam.foam file to define the OpenFOAM case
+touch foam.foam
+
+# -----------------------------------------------------------------------------
+# Run OpenFOAM Simulation
+# -----------------------------------------------------------------------------
+
+echo "[INFO] Launching simulation"
+
+# Run the OpenFOAM solver (simpleFoam) to simulate the case.
+# The simulation logs are saved in log.simpleFoam.
+simpleFoam | tee log.simpleFoam
+
+# -----------------------------------------------------------------------------
+# Post-processing
+# -----------------------------------------------------------------------------
+
+echo "[INFO] Running post-processing"
+
+# Run post-processing commands to integrate and average quantities of interest
+# For example, integrate velocity over the outlet and average pressure at the inlet and outlet.
+postProcess -func "patchIntegrate(name=outlet,U)"
+postProcess -func "patchAverage(name=inlet,p)"
+postProcess -func "patchAverage(name=outlet,p)"
+
+# -----------------------------------------------------------------------------
+# End of script
+# -----------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 import time
 import logging
+import os
 
 # --- Configuration ---
 # PYTHON_EXECUTABLE = Path(r"C:/Users/solim/miniconda3/envs/windshape/python.exe")
@@ -23,52 +24,53 @@ MW_RANGE = range(2, 13)
 MB_RANGE = range(2, 13)
 
 # WSL Paths
-WSL_BASE = str(Path(__file__).parent.resolve())
+CURRENT_DIR = str(Path(__file__).parent.resolve())
 CASE_TEMPLATE = "ELL-case-template"
 
-def wsl_path(*parts):
-    """Join and return WSL path"""
-    return f"{WSL_BASE}/{'/'.join(parts)}"
+def join_path(*parts):
+    """Join and return path"""
+    return f"{CURRENT_DIR}/{'/'.join(parts)}"
 
 import subprocess
 
-def run_command_wsl(command, cwd=None):
-    """Run a command in WSL with OpenFOAM environment sourced."""
-    source_cmd = "source /usr/lib/openfoam/openfoam2412/etc/bashrc"
-    cd_cmd = f"cd {cwd} && " if cwd else ""
-    full_cmd = f"{source_cmd} && {cd_cmd}{command}"
 
+def run_command(command, cwd=None):
+    """Run a shell command with output logging. Optionally run in a specific working directory."""
     result = subprocess.run(
-        ["wsl", "bash", "-c", full_cmd],
+        command,
+        shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True
+        text=True,
+        cwd=cwd  # 👈 run the command in this directory if provided
     )
 
-    # Determine if it was successful
     if result.returncode != 0:
-        # Optionally suppress expected 'failures' for checks
-        if 'test -d' in command or 'ls' in command:
-            return False
-        logging.info(f"Command failed: {command}")
-        logging.info(result.stderr)
+        logging.error(f"Command failed: {command}")
+        logging.error(result.stderr)
+        exit(1)  # Exit the script if the command fails
     else:
         logging.info(result.stdout)
 
     return result
 
+# Check if directory exists
+def dir_exists(path):
+    """Check if a directory exists."""
+    return os.path.isdir(path)
 
+# check if mesh exists
 def mesh_exists(fname):
     """Check if the mesh file already exists in WSL."""
-    trisurf_dir = wsl_path(fname, "constant", "triSurface")
+    trisurf_dir = join_path("outputs", fname, "constant", "triSurface")
     check_command = f"ls {trisurf_dir}/*.msh 2>/dev/null"
-    result = run_command_wsl(check_command)
+    result = run_command(check_command)
     return result
 
 def run_gmsh_script(Mw, Mb, fname):
     """Run the mesh generation script with specified parameters."""
     command = [
-        str("python"),
+        str("python3"),
         str(SCRIPT_PATH),
         "--Mw", str(Mw),
         "--Mb", str(Mb),
@@ -101,19 +103,19 @@ def main():
         for Mb in MB_RANGE:
             job_counter += 1
             fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
-            case_path = wsl_path(fname)
+            case_path = join_path("outputs", fname)
 
             logging.info(f"\n{'-'*60}")
             logging.info(f"JOB {job_counter} of {total_jobs}: {fname}")
             logging.info(f"{'-'*60}")
 
             # 1. Copy template case if it doesn't exist
-            if run_command_wsl(f"test -d {case_path}"):
+            if dir_exists(case_path):
                 logging.info(f"Case folder already exists: {case_path}")
             else:
                 logging.info(f"Copying template case to: {case_path}")
-                run_command_wsl(f"cp -r {WSL_BASE}/{CASE_TEMPLATE} {case_path}")
-                run_command_wsl(f"chmod +x Allrun", cwd=case_path)
+                run_command(f"cp -r {CURRENT_DIR}/{CASE_TEMPLATE} {case_path}")
+                run_command(f"chmod +x Allrun", cwd=case_path)
 
             # 2. Check mesh
             if mesh_exists(fname):
@@ -124,7 +126,7 @@ def main():
 
             # 3. Run Allrun to execute the full simulation
             logging.info(f"Running OpenFOAM simulation via Allrun script")
-            run_command_wsl("./Allrun", cwd=case_path)
+            run_command("./Allrun", cwd=case_path)
 
             logging.info(f"[DONE] Job {job_counter} of {total_jobs} completed: {fname}")
             logging.info(f"{'-'*60}")

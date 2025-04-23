@@ -28,7 +28,7 @@ deltaT          1;
 
 writeControl    timeStep;
 
-writeInterval   200;
+writeInterval   500;
 
 // purgeWrite      5;
 
@@ -46,10 +46,10 @@ runTimeModifiable false;
 
 functions
 {
-    #includeFunc "stressComponents"
-    #includeFunc "pressureCoefficient"
-    #includeFunc "sample"
-    #includeFunc "sampleCp"
+    // #includeFunc "stressComponents"
+    // #includeFunc "pressureCoefficient"
+    // #includeFunc "sample"
+    // #includeFunc "sampleCp"
     #includeFunc "writeCellCentres"
     #includeFunc "wallShearStress"
 }

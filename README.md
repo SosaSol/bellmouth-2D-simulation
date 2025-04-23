@@ -48,6 +48,8 @@ Key features include:
 - [WSL (Windows Subsystem for Linux)](https://docs.microsoft.com/en-us/windows/wsl/)
 - Bash shell (via WSL)
 - Optional: [Anaconda/Miniconda](https://docs.conda.io/en/latest/) for environment management
+- libglu1-mesa \
+- libxft2 \
 
 ### Installation
 
@@ -57,16 +59,16 @@ Key features include:
    git clone https://github.com/yourusername/bellmouth-2d-simulation.git
    cd bellmouth-2d-simulation
    ```
-   
+
 2. Set up a Python environment (optional but recommended):
-   
+
    ```bash
    conda create -n windshape python=3.10
    conda activate windshape
    ```
 
 3. Install dependencies:
-   
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -80,11 +82,12 @@ Key features include:
    ```
 
 ## Usage
+
 From Windows terminal (PowerShell or CMD), run:
 
-   ```bash
-   python run.py
-   ```
+```bash
+python run.py
+```
 
 This script will:
 
@@ -108,6 +111,7 @@ bellmouth-2d-simulation/
 ├── requirements.txt
 └── README.md
 ```
+
 ---
 
 ## Contributing
@@ -115,9 +119,9 @@ bellmouth-2d-simulation/
 Contributions are welcome! To propose a change:
 
 1. Fork the repository
-2. Create a new branch (```git checkout -b feature/new-feature```)
-3. Commit your changes (```git commit -m 'Add new feature'```)
-4. Push to the branch (```git push origin feature/new-feature```)
+2. Create a new branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -m 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
 5. Open a Pull Request
 
 Please ensure code adheres to project conventions and is thoroughly tested.
@@ -125,6 +129,7 @@ Please ensure code adheres to project conventions and is thoroughly tested.
 ---
 
 ## License
+
 This project is licensed under SOLIM's LICENSE
 
 ---
