@@ -16,52 +16,52 @@ FoamFile
 
 ddtSchemes
 {
-    default         steadyState;
+    default         steadyState; // Should be ok
 }
 
 gradSchemes
 {
-    default         Gauss linear;
+    // default         Gauss linear;
+    // If you get residual "bumpiness" or instability near sharp curvature or boundaries, you can experiment with:
+    default         cellLimited Gauss linear 1
+    // grad(p)         faceMDLimited Gauss linear 1; // Fixes checkerboarding 
+    // https://www.openfoam.com/documentation/guides/v2112/api/classFoam_1_1fv_1_1faceMDLimitedGrad.html
+    // grad(U)         Gauss linear;
 }
 
 divSchemes
 {
-    default         none;
+    default         none;   // OK
 
-    div(phi,U)      bounded Gauss LUST grad(U);
+    div(phi,U)      bounded Gauss LUST grad(U); // Stable, higher-order
 
-    turbulence      bounded Gauss limitedLinear 1;
+    turbulence      bounded Gauss limitedLinear 1; // OK
     div(phi,k)      $turbulence;
     div(phi,epsilon) $turbulence;
     div(phi,omega)  $turbulence;
 
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+    div((nuEff*dev2(T(grad(U))))) Gauss linear; // OK
 }
 
 laplacianSchemes
 {
-    default         Gauss linear corrected;
+    default         Gauss linear corrected; // Handles mesh non-orthogonality
 }
 
 interpolationSchemes
 {
     default         linear;
+    // default         limitedLinear 1;         // Smoother transitions, more stable
 }
 
 snGradSchemes
 {
-    default         corrected;
+    default         corrected; // OK
 }
 
 wallDist
 {
-    method          meshWave;
-}
-
-// If you get residual "bumpiness" or instability near sharp curvature or boundaries, you can experiment with:
-gradSchemes
-{
-    default         cellLimited Gauss linear 1;
+    method          meshWave; // OK
 }
 
 

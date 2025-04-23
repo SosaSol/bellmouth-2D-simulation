@@ -12,6 +12,11 @@
 #   - Python with required packages (e.g., pathlib)
 #------------------------------------------------------------------------------
 
+# Get the name of the current directory (case name)
+fname=$(basename "$PWD")
+
+echo "[INFO] Case name detected: $fname"
+
 # -----------------------------------------------------------------------------
 # Mesh Conversion
 # -----------------------------------------------------------------------------
@@ -19,11 +24,7 @@
 echo "[INFO] Converting mesh file to OpenFOAM format"
 
 # Identify the mesh file (.msh) in the constant/triSurface directory.
-# Ensure there is only one mesh file present to avoid errors.
-msh_file=$(ls constant/triSurface/*.msh | head -n 1)
-
-# If more than one file is detected, you might need to handle the case
-# where multiple .msh files exist.
+msh_file="constant/triSurface/${fname}.msh"
 gmshToFoam "$msh_file" | tee log.gmshToFoam
 
 # -----------------------------------------------------------------------------
@@ -51,8 +52,9 @@ checkMesh | tee log.checkMesh
 
 echo "[INFO] Creating foam.foam file"
 
-# Create an empty foam.foam file to define the OpenFOAM case
-touch foam.foam
+# Create an empty ${fname}.foam file to define the OpenFOAM case
+touch "${fname}.foam"
+
 
 # -----------------------------------------------------------------------------
 # Run OpenFOAM Simulation
