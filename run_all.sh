@@ -1,32 +1,35 @@
 #!/bin/bash
 
-# Source OpenFOAM
-source /usr/lib/openfoam/openfoam2412/etc/bashrc
+# Usage:
+#   ./run_all.sh [serial|parallel]
+# Default is serial.
 
-# Constants
-Kx=0.33
-Ky=0.33
-r=0.010
-t=0.005
+# ---------------------- Parse Run Mode ----------------------
+RUN_MODE=${1:-serial}
+if [[ "$RUN_MODE" != "serial" && "$RUN_MODE" != "parallel" ]]; then
+    echo "Invalid run mode: $RUN_MODE"
+    echo "Usage: $0 [serial|parallel]"
+    exit 1
+fi
+echo "[INFO] Run mode: $RUN_MODE"
+
+# ---------------------- Constants ----------------------
+Kx=0.33;    Ky=0.33
+r=0.010;    t=0.005
 L=0.300
-xmin=0.0
-ymin=0.0
-xmax=25.0
-ymax=25.0
+xmin=0.0;   ymin=0.0
+xmax=25.0;  ymax=25.0
 nt=15
 
-MW_START=2
-MW_END=12
-MB_START=2
-MB_END=12
+MW_START=2; MW_END=12
+MB_START=2; MB_END=12
 
 CASE_TEMPLATE="ELL-case-template"
 OUTPUT_DIR="./outputs"
 LOG_DIR="./logs"
 
 # Create directories if they don't exist
-mkdir -p "$OUTPUT_DIR"
-mkdir -p "$LOG_DIR"
+mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
 
 # Compute total iterations and initialize counter
 TOTAL_ITER=$(( (MW_END - MW_START + 1) * (MB_END - MB_START + 1) ))
@@ -51,7 +54,7 @@ for Mw in $(seq $MW_START $MW_END); do
             echo "Running case ${COUNTER}/${TOTAL_ITER}: $fname"
             echo "=================================================="
         
-            # Copy template if it doesn't exist
+            # 1) Copy template if it doesn't exist
             if [ ! -d "$case_path" ]; then
                 echo "[INFO] Copying template case"
                 cp -r "${CASE_TEMPLATE}" "$case_path"
@@ -60,7 +63,7 @@ for Mw in $(seq $MW_START $MW_END); do
                 echo "[SKIP] Case folder already exists"
             fi
 
-            # Check if mesh already exists
+            # 2) Generate mesh if it doesn't exists
             msh_file="${case_path}/constant/triSurface/${fname}.msh"
             if ls $msh_file 1> /dev/null 2>&1; then
                 echo "[SKIP] Mesh already exists for $fname"
@@ -77,9 +80,13 @@ for Mw in $(seq $MW_START $MW_END); do
                     --sd $save_dir
             fi
 
-            # Run Allrun script in the case directory
-            echo "[INFO] Running OpenFOAM simulation"
-            (cd "$case_path" && ./Allrun)
+            # 3) Run Allrun (pass parallel flag if requested)
+            echo "[INFO] Running OpenFOAM simulation ($RUN_MODE)"
+            if [ "$RUN_MODE" = "parallel" ]; then
+                (cd "$case_path" && ./Allrun parallel)
+            else
+                (cd "$case_path" && ./Allrun)
+            fi
 
             echo "[DONE] Case finished: $fname"
             echo
