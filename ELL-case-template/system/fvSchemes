@@ -23,7 +23,8 @@ gradSchemes
 {
     // default         Gauss linear;
     // If you get residual "bumpiness" or instability near sharp curvature or boundaries, you can experiment with:
-    default         cellLimited Gauss linear 1
+    default         cellLimited Gauss linear 1;
+    // GPT suggestions:
     // grad(p)         faceMDLimited Gauss linear 1; // Fixes checkerboarding 
     // https://www.openfoam.com/documentation/guides/v2112/api/classFoam_1_1fv_1_1faceMDLimitedGrad.html
     // grad(U)         Gauss linear;
