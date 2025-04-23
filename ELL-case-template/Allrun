@@ -8,13 +8,64 @@
 
 # Detect parallel option
 RUN_MODE=${1:-serial}  # Default to serial if no argument is provided
-# Use all cores except 4 for system processes
-NP=$(nproc --ignore 4)
-
 # Get the name of the current directory (case name)
 fname=$(basename "$PWD")
 echo "[INFO] Case name detected: $fname"
 echo "[INFO] Run mode: $RUN_MODE"
+
+# ------------------------------------------------------------------------------
+#  DYNAMIC NP LOGIC
+# ------------------------------------------------------------------------------
+
+# 1) Query total cells from mesh (run checkMesh quietly)
+total_cells=$(checkMesh -constant . | awk '/Total number of cells/{print $NF}')
+# Fallback if parsing fails:
+total_cells=${total_cells:-1000000}
+
+# 2) Get available RAM in MB (free memory minus buffer)
+avail_mem=$(free -m | awk '/^Mem:/ {print $7}')  # available column
+
+# 3) Parameters
+mem_per_cell_MB=0.0003   # 0.3 KB per cell per rank ~ 0.0003 MB
+safety_factor=0.7        # use only 70% of available RAM
+n_free_cores=4           # leave 4 cores idle for system
+
+# 4) Compute max ranks by memory
+max_ranks_mem=$(awk -v cells="$total_cells" \
+                     -v mem="$avail_mem" \
+                     -v mpc="$mem_per_cell_MB" \
+                     -v sf="$safety_factor" \
+                     'BEGIN {
+    # cells per rank = total_cells / R  → memory per rank = cells_per_rank * mpc
+    # total_mem_needed = R * memory_per_rank = total_cells * mpc
+    # Solve R_max_mem such that R_max_mem * (total_cells/R_max_mem * mpc) = total_cells * mpc <= mem*sf 
+    # Actually independent of R: total_cells*mpc <= mem*sf  → if false, mesh too big.
+    # Instead assume perfect split: memory per rank = (total_cells/R) * mpc <= (mem*sf)/R
+    # Simpler: R_max_mem = (mem*sf)/( (total_cells/mpc)/R ) → circular. Use total_cells*mpc <= mem*sf
+    if (cells*mpc > mem*sf) {
+      print 1;      # mesh too big, fallback to serial
+    } else {
+      # constrained by cores only
+      print 9999;   # large number, only cores will limit
+    }
+}')
+# 5) Compute max ranks by cores
+max_ranks_core=$(( $(nproc) - n_free_cores ))
+[ $max_ranks_core -lt 1 ] && max_ranks_core=1
+
+# 6) Choose NP as min(max_ranks_mem, max_ranks_core)
+if [ "$max_ranks_mem" -lt "$max_ranks_core" ]; then
+  NP=$max_ranks_mem
+else
+  NP=$max_ranks_core
+fi
+
+# Ensure NP >=1
+[ $NP -lt 1 ] && NP=1
+
+echo "[INFO] Total cells: $total_cells"
+echo "[INFO] Available RAM: ${avail_mem}MB"
+echo "[INFO] Setting NP=$NP (cores limit: $max_ranks_core, mem limit: $max_ranks_mem)"
 
 # ------------------------------------------------------------------------------
 # Mesh Conversion
