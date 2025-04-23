@@ -1,10 +1,14 @@
 import subprocess
 from pathlib import Path
 import time
+import logging
 
 # --- Configuration ---
-PYTHON_EXECUTABLE = Path(r"C:/Users/solim/miniconda3/envs/windshape/python.exe")
-SCRIPT_PATH = Path("mesh_test.py")
+# PYTHON_EXECUTABLE = Path(r"C:/Users/solim/miniconda3/envs/windshape/python.exe")
+SCRIPT_PATH = Path("mesh.py")
+
+# --- logging configuration ---
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s")
 
 # Simulation constants
 Kx, Ky = 0.3, 0.3
@@ -46,10 +50,10 @@ def run_command_wsl(command, cwd=None):
         # Optionally suppress expected 'failures' for checks
         if 'test -d' in command or 'ls' in command:
             return False
-        print(f"[ERROR] Command failed: {command}")
-        print(result.stderr)
+        logging.info(f"Command failed: {command}")
+        logging.info(result.stderr)
     else:
-        print(result.stdout)
+        logging.info(result.stdout)
 
     return result
 
@@ -64,7 +68,7 @@ def mesh_exists(fname):
 def run_gmsh_script(Mw, Mb, fname):
     """Run the mesh generation script with specified parameters."""
     command = [
-        str(PYTHON_EXECUTABLE),
+        str("python"),
         str(SCRIPT_PATH),
         "--Mw", str(Mw),
         "--Mb", str(Mb),
@@ -83,10 +87,10 @@ def run_gmsh_script(Mw, Mb, fname):
     try:
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Mesh generation failed for {fname}")
-        print(f"[DETAILS] {e}")
+        logging.info(f"Mesh generation failed for {fname}")
+        logging.info(f"{e}")
     else:
-        print(f"[INFO] Mesh generation successful for {fname}")
+        logging.info(f"Mesh generation successful for {fname}")
 
 def main():
     total_jobs = len(MW_RANGE) * len(MB_RANGE)
@@ -99,34 +103,34 @@ def main():
             fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
             case_path = wsl_path(fname)
 
-            print(f"\n{'-'*60}")
-            print(f"JOB {job_counter} of {total_jobs}: {fname}")
-            print(f"{'-'*60}")
+            logging.info(f"\n{'-'*60}")
+            logging.info(f"JOB {job_counter} of {total_jobs}: {fname}")
+            logging.info(f"{'-'*60}")
 
             # 1. Copy template case if it doesn't exist
             if run_command_wsl(f"test -d {case_path}"):
-                print(f"[SKIP] Case folder already exists: {case_path}")
+                logging.info(f"Case folder already exists: {case_path}")
             else:
-                print(f"[INFO] Copying template case to: {case_path}")
+                logging.info(f"Copying template case to: {case_path}")
                 run_command_wsl(f"cp -r {WSL_BASE}/{CASE_TEMPLATE} {case_path}")
                 run_command_wsl(f"chmod +x Allrun", cwd=case_path)
 
             # 2. Check mesh
             if mesh_exists(fname):
-                print(f"[SKIP] Mesh already exists for {fname}, skipping mesh generation.")
+                logging.info(f"Mesh already exists for {fname}, skipping mesh generation.")
             else:
-                print(f"[INFO] Generating mesh for {fname}")
+                logging.info(f"Generating mesh for {fname}")
                 run_gmsh_script(Mw, Mb, fname)
 
             # 3. Run Allrun to execute the full simulation
-            print(f"[INFO] Running OpenFOAM simulation via Allrun script")
+            logging.info(f"Running OpenFOAM simulation via Allrun script")
             run_command_wsl("./Allrun", cwd=case_path)
 
-            print(f"[DONE] Job {job_counter} of {total_jobs} completed: {fname}")
-            print(f"{'-'*60}")
+            logging.info(f"[DONE] Job {job_counter} of {total_jobs} completed: {fname}")
+            logging.info(f"{'-'*60}")
 
     total_time = time.time() - zero_time
-    print(f"\n All {total_jobs} jobs completed in {total_time:.2f} seconds")
+    logging.info(f"\n All {total_jobs} jobs completed in {total_time:.2f} seconds")
 
 if __name__ == "__main__":
     main()
