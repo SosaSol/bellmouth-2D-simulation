@@ -1,0 +1,5 @@
+gmsh
+libglu1-mesa
+libxft2
+
+scipy
