@@ -8,7 +8,8 @@
 
 # Detect parallel option
 RUN_MODE=${1:-serial}  # Default to serial if no argument is provided
-NP=$(nproc)            # Number of processors available
+# Use all cores except 4 for system processes
+NP=$(nproc --ignore 4)
 
 # Get the name of the current directory (case name)
 fname=$(basename "$PWD")
