@@ -2,82 +2,84 @@
 
 #------------------------------------------------------------------------------
 # OpenFOAM Mesh Conversion, Simulation, and Post-processing Script
-# Version: 1.0
-# Description: This script automates the process of converting mesh, running
-#              OpenFOAM simulations, and performing post-processing tasks.
-#              It also includes a post-processing step to update boundary conditions.
-#
-# Dependencies:
-#   - OpenFOAM installed and properly set up
-#   - Python with required packages (e.g., pathlib)
+# Version: 1.1
+# Supports optional parallel execution via argument: ./Allrun [serial|parallel]
 #------------------------------------------------------------------------------
+
+# Detect parallel option
+RUN_MODE=${1:-serial}  # Default to serial if no argument is provided
+NP=$(nproc)            # Number of processors available
 
 # Get the name of the current directory (case name)
 fname=$(basename "$PWD")
-
 echo "[INFO] Case name detected: $fname"
+echo "[INFO] Run mode: $RUN_MODE"
 
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Mesh Conversion
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 echo "[INFO] Converting mesh file to OpenFOAM format"
-
-# Identify the mesh file (.msh) in the constant/triSurface directory.
 msh_file="constant/triSurface/${fname}.msh"
 gmshToFoam "$msh_file" | tee log.gmshToFoam
 
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Update Boundary Conditions
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 echo "[INFO] Updating boundary conditions"
-
-# Call the Python script to update boundary conditions in the mesh.
 python3 ../../updateBoundaryConditions.py
 
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Mesh Validation
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 echo "[INFO] Checking mesh"
-
-# Run checkMesh to ensure the mesh is valid.
-# The results are saved in the log file log.checkMesh.
 checkMesh | tee log.checkMesh
 
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Create foam.foam File
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 echo "[INFO] Creating foam.foam file"
-
-# Create an empty ${fname}.foam file to define the OpenFOAM case
 touch "${fname}.foam"
 
+# ------------------------------------------------------------------------------
+# Run Simulation
+# ------------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# Run OpenFOAM Simulation
-# -----------------------------------------------------------------------------
+if [ "$RUN_MODE" = "parallel" ]; then
 
-echo "[INFO] Launching simulation"
+    # Check if decomposition already exists (e.g., processor0 folder)
+    if [ ! -d "processor0" ]; then
+        echo "[INFO] Setting numberOfSubdomains to $NP"
+        sed -i "s/numberOfSubdomains.*/numberOfSubdomains $NP;/" system/decomposeParDict
+        echo "[INFO] Decomposing domain for parallel execution"
+        decomposePar | tee log.decomposePar
+    else
+        echo "[INFO] Domain already decomposed. Skipping decomposePar."
+    fi
 
-# Run the OpenFOAM solver (simpleFoam) to simulate the case.
-# The simulation logs are saved in log.simpleFoam.
-simpleFoam | tee log.simpleFoam
+    echo "[INFO] Running simpleFoam in parallel on $NP cores"
+    mpirun -np $NP simpleFoam -parallel | tee log.simpleFoam
 
-# -----------------------------------------------------------------------------
+    echo "[INFO] Reconstructing results from processors"
+    reconstructPar | tee log.reconstructPar
+else
+    echo "[INFO] Running simpleFoam in serial"
+    simpleFoam | tee log.simpleFoam
+fi
+
+# ------------------------------------------------------------------------------
 # Post-processing
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 echo "[INFO] Running post-processing"
-
-# Run post-processing commands to integrate and average quantities of interest
-# For example, integrate velocity over the outlet and average pressure at the inlet and outlet.
 postProcess -func "patchIntegrate(name=outlet,U)"
 postProcess -func "patchAverage(name=inlet,p)"
 postProcess -func "patchAverage(name=outlet,p)"
 
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # End of script
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
