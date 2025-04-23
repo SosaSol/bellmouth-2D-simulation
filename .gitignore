@@ -1,0 +1,30 @@
+# Ignore simulation outputs and logs
+logs/
+outputs/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+env/
+*.venv/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Gmsh and OpenFOAM temporary files
+*.msh~
+processor*/
+polyMesh/
+log.*
