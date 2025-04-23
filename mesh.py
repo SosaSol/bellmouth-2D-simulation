@@ -375,7 +375,7 @@ def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33,
 
     # Define name and path for mesh file
     fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
-    save_path = Path(sd) if sd else Path("meshes")
+    save_path = Path(sd) if sd else Path("outputs/meshes")
     # logging.info(f"Save path: {save_path}")
     
 
