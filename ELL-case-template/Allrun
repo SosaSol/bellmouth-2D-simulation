@@ -13,55 +13,8 @@ fname=$(basename "$PWD")
 echo "[INFO] Case name detected: $fname"
 echo "[INFO] Run mode: $RUN_MODE"
 
-# ------------------------------------------------------------------------------
-#  DYNAMIC NP SELECTION (based on mesh size, RAM, and physical cores)
-# ------------------------------------------------------------------------------
-# 1) Query total cells from mesh (quiet checkMesh)
-total_cells=$(checkMesh -constant . 2>/dev/null | awk '/Total number of cells/ {print $NF}')
-total_cells=${total_cells:-1000000}  # fallback if parsing fails
-
-# 2) Get available RAM in MB
-avail_mem=$(free -m | awk '/^Mem:/ {print $7}')  # “available” column
-
-# 3) Memory‐based limit
-mem_per_cell_MB=0.0003    # estimate: 300 bytes per cell per rank
-safety_factor=0.7         # use at most 70% of available RAM
-
-# If mesh requires more than safety_factor*avail_mem → forced serial
-if awk -v cells="$total_cells" -v mpc="$mem_per_cell_MB" -v sf="$safety_factor" -v mem="$avail_mem" \
-       'BEGIN { exit (cells*mpc > mem*sf) }'; then
-    max_ranks_mem=1
-else
-    max_ranks_mem=9999   # effectively unlimited by memory
-fi
-
-# 4) Physical‐core‐based limit
-n_free_cores=4  # leave some cores idle for OS/IO
-
-# Get socket and core count
-sockets=$(lscpu | awk '/Socket\(s\):/ {print $2}')
-cores_per_socket=$(lscpu | awk '/Core\(s\) per socket:/ {print $4}')
-physical_cores=$(( sockets * cores_per_socket ))
-
-max_ranks_core=$(( physical_cores - n_free_cores ))
-[ $max_ranks_core -lt 1 ] && max_ranks_core=1
-
-# 5) Final NP choice: the smaller of memory and core limits
-if [ "$max_ranks_mem" -lt "$max_ranks_core" ]; then
-    NP=$max_ranks_mem
-else
-    NP=$max_ranks_core
-fi
-[ $NP -lt 1 ] && NP=1
-
-# 6) Report
-echo "[INFO] Total cells:      $total_cells"
-echo "[INFO] Available RAM:    ${avail_mem} MB"
-echo "[INFO] Physical cores:   $physical_cores (leaving $n_free_cores free)"
-echo "[INFO] Mem limit ranks:  $max_ranks_mem"
-echo "[INFO] Core limit ranks: $max_ranks_core"
-echo "[INFO] Selected NP:      $NP"
-
+# Set number of processors for parallel execution
+NP=12
 
 # ------------------------------------------------------------------------------
 # Mesh Conversion
@@ -96,32 +49,32 @@ touch "${fname}.foam"
 # Run Simulation
 # ------------------------------------------------------------------------------
 
-# if [ "$RUN_MODE" = "parallel" ] && [ "$NP" -gt 1 ]; then
-#   # Only decompose if >1
-#   if [ ! -d "processor0" ]; then
-#     decomposePar | tee log.decomposePar
-#   fi
+if [ "$RUN_MODE" = "parallel" ] && [ "$NP" -gt 1 ]; then
+  # Only decompose if >1
+  if [ ! -d "processor0" ]; then
+    decomposePar | tee log.decomposePar
+  fi
 
-#   echo "[INFO] Running simpleFoam in parallel on $NP cores"
-#   mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
+  echo "[INFO] Running simpleFoam in parallel on $NP cores"
+  mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
 
-#   echo "[INFO] Reconstructing results"
-#   reconstructPar | tee log.reconstructPar
+  echo "[INFO] Reconstructing results"
+  reconstructPar | tee log.reconstructPar
 
-# elif [ "$RUN_MODE" = "parallel" ] && [ "$NP" -eq 1 ]; then
-#   # Requested parallel, but NP=1
-#   echo "[WARN] Parallel requested but NP=1; running serial instead"
-#   simpleFoam | tee log.simpleFoam
+elif [ "$RUN_MODE" = "parallel" ] && [ "$NP" -eq 1 ]; then
+  # Requested parallel, but NP=1
+  echo "[WARN] Parallel requested but NP=1; running serial instead"
+  simpleFoam | tee log.simpleFoam
 
-# else
-#   echo "[INFO] Running simpleFoam in serial"
-#   simpleFoam | tee log.simpleFoam
-# fi
+else
+  echo "[INFO] Running simpleFoam in serial"
+  simpleFoam | tee log.simpleFoam
+fi
 
-NP = 8
-decomposePar | tee log.decomposePar
-echo "[INFO] Running simpleFoam in parallel on 8 cores"
-mpirun --use-hwthread-cpus -np 8 simpleFoam -parallel | tee log.simpleFoam
+# NP = 8
+# decomposePar | tee log.decomposePar
+# echo "[INFO] Running simpleFoam in parallel on 8 cores"
+# mpirun --use-hwthread-cpus -np 8 simpleFoam -parallel | tee log.simpleFoam
 
 # ------------------------------------------------------------------------------
 # Post-processing
