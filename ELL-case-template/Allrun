@@ -96,27 +96,32 @@ touch "${fname}.foam"
 # Run Simulation
 # ------------------------------------------------------------------------------
 
-if [ "$RUN_MODE" = "parallel" ] && [ "$NP" -gt 1 ]; then
-  # Only decompose if >1
-  if [ ! -d "processor0" ]; then
-    decomposePar | tee log.decomposePar
-  fi
+# if [ "$RUN_MODE" = "parallel" ] && [ "$NP" -gt 1 ]; then
+#   # Only decompose if >1
+#   if [ ! -d "processor0" ]; then
+#     decomposePar | tee log.decomposePar
+#   fi
 
-  echo "[INFO] Running simpleFoam in parallel on $NP cores"
-  mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
+#   echo "[INFO] Running simpleFoam in parallel on $NP cores"
+#   mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
 
-  echo "[INFO] Reconstructing results"
-  reconstructPar | tee log.reconstructPar
+#   echo "[INFO] Reconstructing results"
+#   reconstructPar | tee log.reconstructPar
 
-elif [ "$RUN_MODE" = "parallel" ] && [ "$NP" -eq 1 ]; then
-  # Requested parallel, but NP=1
-  echo "[WARN] Parallel requested but NP=1; running serial instead"
-  simpleFoam | tee log.simpleFoam
+# elif [ "$RUN_MODE" = "parallel" ] && [ "$NP" -eq 1 ]; then
+#   # Requested parallel, but NP=1
+#   echo "[WARN] Parallel requested but NP=1; running serial instead"
+#   simpleFoam | tee log.simpleFoam
 
-else
-  echo "[INFO] Running simpleFoam in serial"
-  simpleFoam | tee log.simpleFoam
-fi
+# else
+#   echo "[INFO] Running simpleFoam in serial"
+#   simpleFoam | tee log.simpleFoam
+# fi
+
+NP = 8
+decomposePar | tee log.decomposePar
+echo "[INFO] Running simpleFoam in parallel on 8 cores"
+mpirun --use-hwthread-cpus -np 8 simpleFoam -parallel | tee log.simpleFoam
 
 # ------------------------------------------------------------------------------
 # Post-processing
@@ -126,6 +131,7 @@ echo "[INFO] Running post-processing"
 postProcess -func "patchIntegrate(name=outlet,U)"
 postProcess -func "patchAverage(name=inlet,p)"
 postProcess -func "patchAverage(name=outlet,p)"
+
 
 # ------------------------------------------------------------------------------
 # End of script

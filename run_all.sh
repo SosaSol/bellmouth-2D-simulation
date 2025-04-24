@@ -14,7 +14,7 @@ fi
 echo "[INFO] Run mode: $RUN_MODE"
 
 # ---------------------- Constants ----------------------
-Kx=0.33;    Ky=0.33
+Kx=0.33;    Ky=0.9;
 r=0.010;    t=0.005
 L=0.300
 xmin=0.0;   ymin=0.0
