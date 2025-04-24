@@ -6,7 +6,7 @@ import multiprocessing
 from pathlib import Path
 import logging
 import math
-from scipy.optimize import fsolve
+from scipy.optimize import newton
 
 # third‑party
 import gmsh
@@ -15,7 +15,6 @@ import gmsh
 MM = 1e-3
 MODULE_WIDTH = 240.0e-3  # m
 GAP = 2.5e-3  # m
-OPENFOAM_BASHRC = "/usr/lib/openfoam/openfoam2412/etc/bashrc"
 
 SAVE_ROOT = Path.cwd()
 
@@ -109,7 +108,7 @@ def create_geometry(
     Returns:
         surface: the tag of the created surface
         curve_tags: list of all curve tags in order
-        edge_points: two point tags for boundary layer 'fan'
+        edge_points: two point tags for boundary layer end
     """
     logging.info("Building geometry...")
 
@@ -170,14 +169,7 @@ def create_geometry(
 # Boundary Layer
 # -----------------------------
 
-def layers_needed_numeric(y1, delta, r):
-    def func(N):
-        return y1 * (1 - r**N) / (1 - r) - delta
-    N_guess = 20
-    N_sol = fsolve(func, N_guess)
-    return math.ceil(N_sol[0])
-
-def compute_boundary_layer_info(U_inf: float, nu: float, x:float, y_plus:float=0.95, expansion_ratio:float=1.05):
+def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:float=0.95, n_layers:int=20) -> tuple[float, float, float]:
     """
     Computes boundary layer parameters for a turbulent boundary layer over a flat plate.
     
@@ -190,58 +182,71 @@ def compute_boundary_layer_info(U_inf: float, nu: float, x:float, y_plus:float=0
     - n_layers: Number of boundary layer layers
     
     Returns:
-    - Dictionary with y1, delta99, total height, and layer details
+    - y1: Height of the first cell [m]
+    - expansion_ratio: Growth ratio between layers
     """
         
-    if expansion_ratio <= 1.0:
-        raise ValueError("Expansion ratio must be > 1.0")
+    if n_layers < 5:
+        logging.warning("N_layers < 5, this may lead to inaccurate results.")
 
+    # Calculate the first cell height (y1)
+    Re_x = U_inf * x / nu                   # Reynolds number based on x 
+    Cf = (2*math.log10(Re_x)-0.65)**(-2.3)  # Skin friction coefficient for turbulent boundary layer (empirical)
+    u_tau = U_inf * math.sqrt(Cf / 2)       # Friction velocity
+    yp = y_plus * nu / u_tau                # First cell height for desired y+
+    y1 = 2*yp                               # Total height of the first cell 
+
+    # Growth Ratio
+    delta99 = 4.91*x/Re_x**0.5 if Re_x<5e5 else 0.38*x/Re_x**0.2 # Boundary layer thickness
+    r0 = 5                          # Initial guess for growth ratio
     
-    Re_x = U_inf * x / nu               # Reynolds number based on x 
-    Cf = 0.026 / Re_x**0.2              # Skin friction coefficient for turbulent boundary layer (empirical)
-    u_tau = U_inf * math.sqrt(Cf / 2)   # Friction velocity
-    y1 = y_plus * nu / u_tau            # First cell height for desired y+
-    delta99 = 0.37 * x / Re_x**0.2      # Boundary layer thickness
+    def func(r:float) -> float:
+        return  r**n_layers -r*(delta99/y1) + (delta99/y1-1)
+    def fprime(r:float) -> float:
+        return n_layers*r**(n_layers-1) - (delta99/y1)
     
-    # Compute required number of layers
-    n_layers = math.log(1 + ((expansion_ratio - 1) * delta99 / y1)) / math.log(expansion_ratio)
-    n_layers = math.ceil(n_layers)          # Round up to nearest integer
+    expansion_ratio = newton(func=func, x0=r0,fprime=fprime, tol=1e-5, maxiter=100)  # Solve for growth ratio using Newton's method
+    # truncate expansion ration to two decimal places
+    expansion_ratio = math.trunc(expansion_ratio*100)/100
 
-    return {
-        "Re_x": Re_x,
-        "Cf": Cf,
-        "u_tau": u_tau,
-        "y1": y1,
-        "delta99": delta99,
-        "n_layers": n_layers,
-        "expansion_ratio": expansion_ratio
-    }
+    return  y1, delta99, expansion_ratio
 
-def apply_boundary_layer(curve_tags:list, edge_points:list, bl_thickness:float=3e-3):
+def apply_boundary_layer(curve_tags:list, edge_points:list, x:float, n_layers:int=20, y_plus:float=0.95,  U_inf:float=16) -> None:
     """
-    Apply a structured boundary layer on selected curves and fan points.
+    Apply a structured boundary layer on selected curves and end points.
+
+    Parameters:
+    - curve_tags: List of curve tags for the boundary layer
+    - edge_points: List of point tags for the fan points
+    - x: Distance from leading edge [m] (for estimating Cf and delta99)
+    - n_layers: Number of boundary layer layers
+    - y_plus: Desired dimensionless first cell height
+    - U_inf: Freestream velocity [m/s]
     """
+    y1, bl_thickness, expansion_ratio = boundaryLayerParameters(U_inf=U_inf, x=x, y_plus=y_plus, n_layers=n_layers)
+    logging.info(f"Boundary layer parameters: y1={y1:.4f}, bl_thickness={bl_thickness:.4f}, expansion_ratio={expansion_ratio}")
+
     bl = gmsh.model.mesh.field.add("BoundaryLayer")
-    gmsh.model.mesh.field.setNumbers(bl, "CurvesList", curve_tags)
-    gmsh.model.mesh.field.setNumbers(bl, "PointsList", edge_points)
-    gmsh.model.mesh.field.setNumber(bl, "Thickness", bl_thickness)
-    gmsh.model.mesh.field.setNumber(bl, "Size", 5e-5)
-    gmsh.model.mesh.field.setNumber(bl, "Ratio", 1.05)
-    gmsh.model.mesh.field.setNumber(bl, "NbLayers", 30)
-    gmsh.model.mesh.field.setNumber(bl, "Quads", 1)
+    gmsh.model.mesh.field.setNumbers(bl, "CurvesList", curve_tags)  # Curves for BL
+    gmsh.model.mesh.field.setNumbers(bl, "PointsList", edge_points) # End points for BL
+    gmsh.model.mesh.field.setNumber(bl, "Thickness", bl_thickness)  # Total thickness of boundary layer
+    gmsh.model.mesh.field.setNumber(bl, "Size", y1)                 # Size of the first cell
+    gmsh.model.mesh.field.setNumber(bl, "Ratio", expansion_ratio)   # Growth ratio between layers
+    gmsh.model.mesh.field.setNumber(bl, "NbLayers", n_layers)       # Number of layers
+    gmsh.model.mesh.field.setNumber(bl, "Quads", 1)                 # Use quadrilateral elements
     gmsh.model.mesh.field.setAsBoundaryLayer(bl)
     gmsh.model.occ.synchronize()
 
 # -----------------------------
 # Mesh Refinement
 # -----------------------------
-def refine_mesh(curve_tags:list, xmin:float, xmax:float, ymin:float, ymax:float):
+def refine_mesh(curve_tags:list, xmin:float, xmax:float, ymin:float, ymax:float) -> None:
     """
     Add distance + threshold + box fields and combine for smooth grading.
     """
     # Distance from bellmouth wall
     dist = gmsh.model.mesh.field.add("Distance")
-    gmsh.model.mesh.field.setNumbers(dist, "EdgesList", curve_tags[2:9])
+    gmsh.model.mesh.field.setNumbers(dist, "EdgesList", curve_tags)
     gmsh.model.mesh.field.setNumber(dist, "Sampling", 100)
 
     # Threshold based on distance
@@ -314,7 +319,7 @@ def save_mesh(fname:str , save_path: Path):
 # -----------------------------    
 def print_info(
         Mw:int, Mb:int, Kx:float, Ky:float, 
-        r:float, t:float, L:float, 
+        r:float, L:float, t:float,  
         xmin:float, ymin:float, xmax:float, ymax:float, 
         nt: int, fname:str):
     """
@@ -326,8 +331,8 @@ def print_info(
     logging.info(f"          - Bellmouth reference modules: {Mb}")
     logging.info(f"          - Ellipse scaling (Kx, Ky)   : {Kx:.2f}, {Ky:.2f}")
     logging.info(f"          - Radius of curvature (mm)   : {r * 1e3:.1f}")
-    logging.info(f"          - Wall thickness (mm)        : {t * 1e3:.1f}")
     logging.info(f"          - Straight section len (mm)  : {L * 1e3:.1f}")
+    logging.info(f"          - Wall thickness (mm)        : {t * 1e3:.1f}")
 
     logging.info(f"Domain bounds -> X: [{xmin}, {xmax}], Y: [{ymin}, {ymax}]")
     logging.info(f"Using {nt} threads for GMSH.")
@@ -386,13 +391,15 @@ def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33,
     gmsh.option.setNumber("General.NumThreads", nt)     # Set number of threads for GMSH
     
     # Print info
-    print_info(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax, nt, fname)
+    print_info(Mw=Mw, Mb=Mb, Kx=Kx, Ky=Ky, r=r, t=t, L=L,
+                xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax,
+                nt=nt, fname=fname)
     # Create geometry
-    surf, curves, epts = create_geometry(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax)
+    surf, curves, edgePoints = create_geometry(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax)
     # Apply boundary layer
-    apply_boundary_layer(curve_tags=curves[2:9], edge_points=epts)
+    apply_boundary_layer(curve_tags=curves[2:9], edge_points=edgePoints, x=1.5*L, n_layers=20, y_plus=0.95, U_inf=16)
     # Refine mesh
-    refine_mesh(curve_tags=curves, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+    refine_mesh(curve_tags=curves[2:9], xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
 
     # Generate 2D mesh
     gmsh.option.setNumber("Mesh.Algorithm", 6)  # Frontal-Delaunay
