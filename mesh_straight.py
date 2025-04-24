@@ -354,8 +354,8 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
     # Extrude and define physical groups
     extrude_and_group(surface=surf)
 
-    if '-nopopup' not in sys.argv:
-        gmsh.fltk.run()
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
