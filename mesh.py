@@ -33,8 +33,8 @@ def parse_args():
     parser.add_argument("--Mw", type=int, default=12, help="Number of wires")
     parser.add_argument("--Mb", type=int, default=12, help="Bellmouth multiplier")
     
-    parser.add_argument("--Kx", type=float, default=0.3, help="X-axis ellipse scale")
-    parser.add_argument("--Ky", type=float, default=0.3, help="Y-axis ellipse scale")
+    parser.add_argument("--Kx", type=float, default=0.33, help="X-axis ellipse scale")
+    parser.add_argument("--Ky", type=float, default=0.33, help="Y-axis ellipse scale")
     
     parser.add_argument("--r", type=float, default=10e-3, help="Radius of curvature (in meters)")
     parser.add_argument("--t", type=float, default=5e-3, help="Wall thickness (in meters)")
@@ -379,7 +379,7 @@ def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33,
     """
 
     # Define name and path for mesh file
-    fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(t*1e3)}"
+    fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(r*1e3)}-{int(L*1e3)}-{int(t*1e3)}"
     save_path = Path(sd) if sd else Path("outputs/meshes")
     # logging.info(f"Save path: {save_path}")
     
@@ -409,8 +409,8 @@ def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33,
     # Extrude and define physical groups
     extrude_and_group(surface=surf)
     
-    if '-nopopup' not in sys.argv:
-        gmsh.fltk.run()
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)

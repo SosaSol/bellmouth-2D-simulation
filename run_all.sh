@@ -46,11 +46,12 @@ echo
 # Loop over Mw and Mb
 for Mw in $(seq $MW_START $MW_END); do
     for Mb in $(seq $MB_START $MB_END); do
-        fname=$(printf "ELL-%d-%d-%.0f-%.0f-%.0f-%.0f" \
+        fname=$(printf "ELL-%d-%d-%.0f-%.0f-%.0f-%.0f-%.0f" \
             "$Mw" "$Mb" \
             "$(echo "$Kx * 100" | bc -l)" \
             "$(echo "$Ky * 100" | bc -l)" \
             "$(echo "$r * 1000" | bc -l)" \
+            "$(echo "$L * 1000" | bc -l)" \
             "$(echo "$t * 1000" | bc -l)" )
 
         case_path="${OUTPUT_DIR}/${fname}"
