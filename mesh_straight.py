@@ -145,7 +145,7 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     """
         
     if n_layers < 5:
-        logging.warning("N_layers < 5, this may lead to inaccurate results.")
+        logging.warning("n_layers < 5, this may lead to inaccurate results.")
 
     # Calculate the first cell height (y1)
     Re_x = U_inf * x / nu                   # Reynolds number based on x 
@@ -182,7 +182,7 @@ def apply_boundary_layer(curve_tags:list, edge_points:list, x:float, n_layers:in
     - U_inf: Freestream velocity [m/s]
     """
     y1, bl_thickness, expansion_ratio = boundaryLayerParameters(U_inf=U_inf, x=x, y_plus=y_plus, n_layers=n_layers)
-    logging.info(f"Boundary layer parameters: y1={y1:.4f}, bl_thickness={bl_thickness:.4f}, expansion_ratio={expansion_ratio}")
+    logging.info(f"Boundary layer parameters: y1={y1:.2e}, bl_thickness={bl_thickness:.2e}, expansion_ratio={expansion_ratio}")
 
     bl = gmsh.model.mesh.field.add("BoundaryLayer")
     gmsh.model.mesh.field.setNumbers(bl, "CurvesList", curve_tags)  # Curves for BL
@@ -198,14 +198,14 @@ def apply_boundary_layer(curve_tags:list, edge_points:list, x:float, n_layers:in
 # -----------------------------
 # Mesh Refinement
 # -----------------------------
-def refine_mesh(curve_tags:list, xmin:float, xmax:float, ymin:float, ymax:float) -> None:
+def refine_mesh(curve_tags:list, xmax:float, ymin:float, Di:float, L:float) -> None:
     """
     Add distance + threshold + box fields and combine for smooth grading.
     """
     # Distance from bellmouth wall
     dist = gmsh.model.mesh.field.add("Distance")
     gmsh.model.mesh.field.setNumbers(dist, "EdgesList", curve_tags)
-    gmsh.model.mesh.field.setNumber(dist, "Sampling", 100)
+    gmsh.model.mesh.field.setNumber(dist, "Sampling", 1e6)
 
     # Threshold based on distance
     thr = gmsh.model.mesh.field.add("Threshold")
@@ -219,10 +219,10 @@ def refine_mesh(curve_tags:list, xmin:float, xmax:float, ymin:float, ymax:float)
     box = gmsh.model.mesh.field.add("Box")
     gmsh.model.mesh.field.setNumber(box, "VIn", 1e-2)
     gmsh.model.mesh.field.setNumber(box, "VOut", 1)
-    gmsh.model.mesh.field.setNumber(box, "XMin", xmax-3)
+    gmsh.model.mesh.field.setNumber(box, "XMin", xmax-L-1)
     gmsh.model.mesh.field.setNumber(box, "XMax", xmax)
     gmsh.model.mesh.field.setNumber(box, "YMin", ymin)
-    gmsh.model.mesh.field.setNumber(box, "YMax", ymin+3)
+    gmsh.model.mesh.field.setNumber(box, "YMax", ymin+Di/2+0.5)
     gmsh.model.mesh.field.setNumber(box, "ZMin", -2)
     gmsh.model.mesh.field.setNumber(box, "ZMax",  2)
     gmsh.model.mesh.field.setNumber(box, "Thickness", 10)
@@ -344,7 +344,8 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
     # Apply boundary layer
     apply_boundary_layer(curve_tags=curves[2:5], edge_points=edgePoints, x=L, n_layers=20, y_plus=0.95, U_inf=16)
     # Refine mesh
-    refine_mesh(curve_tags=curves[2:5], xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+    Di = compute_geometry_parameters(Mw)
+    refine_mesh(curve_tags=curves[2:5], xmax=xmax, ymin=ymin, Di=Di, L=L)
 
     # Generate 2D mesh
     gmsh.option.setNumber("Mesh.Algorithm", 6)  # Frontal-Delaunay
@@ -352,7 +353,10 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
 
     # Extrude and define physical groups
     extrude_and_group(surface=surf)
-    
+
+    if '-nopopup' not in sys.argv:
+        gmsh.fltk.run()
+
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
     save_mesh(fname, save_path=save_path)
