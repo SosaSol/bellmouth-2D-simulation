@@ -1,0 +1,30 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2412                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+solverInfo1
+{
+    // Mandatory entries
+    type            solverInfo;
+    libs            (utilityFunctionObjects);
+    fields
+    (
+        U
+        p
+        k
+        omega
+        nut
+    );
+
+    // Optional entries
+    writeResidualFields yes;
+
+    // Optional (inherited) entries
+    // ...
+}
+
+// ************************************************************************* //

@@ -1,0 +1,53 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2412                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+pressure1 // Static
+{
+    // Mandatory entries (unmodifiable)
+    type            pressure;
+    libs            (fieldFunctionObjects);
+
+    // Mandatory entries (runtime modifiable)
+    mode            staticCoeff;
+
+    // Optional entries (runtime modifiable)
+    // p               <pName>;
+    // U               <UName>;
+    // rho             <rhoName>;
+    // rhoInf          1.0; // enabled if rho=rhoInf
+    // pRef            0.0;
+    // hydroStaticMode none;
+    // g               (0 -9.81 0); // enabled if hydroStaticMode != none
+    // hRef            0.0;         // enabled if hydroStaticMode != none
+    // pInf            0.0;
+    // UInf            (1 0 0);
+}
+
+pressure2  // Total
+{
+    // Mandatory entries (unmodifiable)
+    type            pressure;
+    libs            (fieldFunctionObjects);
+
+    // Mandatory entries (runtime modifiable)
+    mode            totalCoeff;
+
+    // Optional entries (runtime modifiable)
+    // p               <pName>;
+    // U               <UName>;
+    // rho             <rhoName>;
+    // rhoInf          1.0; // enabled if rho=rhoInf
+    // pRef            0.0;
+    // hydroStaticMode none;
+    // g               (0 -9.81 0); // enabled if hydroStaticMode != none
+    // hRef            0.0;         // enabled if hydroStaticMode != none
+    // pInf            0.0;
+    // UInf            (1 0 0);
+}
+
+// ************************************************************************* //

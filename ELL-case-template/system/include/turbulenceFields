@@ -1,0 +1,32 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2412                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+turbulenceFields1
+{
+    // Mandatory entries (unmodifiable)
+    type            turbulenceFields;
+    libs            (fieldFunctionObjects);
+
+    // Mandatory entries (runtime modifiable)
+    // Either field or fields entries
+    fields          (R devRhoReff);
+    // field           R;
+
+    // Optional (inherited) entries
+    // region          region0;
+    // enabled         true;
+    // log             true;
+    // timeStart       0;
+    // timeEnd         1000;
+    // executeControl  timeStep;
+    // executeInterval 1;
+    // writeControl    timeStep;
+    // writeInterval   1;
+}
+
+// ************************************************************************* //

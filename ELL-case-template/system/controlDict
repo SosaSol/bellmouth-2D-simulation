@@ -46,12 +46,12 @@ runTimeModifiable false;
 
 functions
 {
-    // #includeFunc "stressComponents"
-    // #includeFunc "pressureCoefficient"
-    // #includeFunc "sample"
-    // #includeFunc "sampleCp"
-    #includeFunc "writeCellCentres"
-    #includeFunc "wallShearStress"
+    #includeFunc massFlowRateOutlet
+    #includeFunc yPlus
+    #includeFunc turbulenceFields
+    #includeFunc pressure
+    #includeFunc residuals
+    #includeFunc solverInfo
 }
 
 

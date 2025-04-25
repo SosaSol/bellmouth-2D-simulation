@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2412                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+massFlowRateOutlet1
+{
+    // Mandatory entries (unmodifiable)
+    type            surfaceFieldValue;
+    functionObjectLibs ("libfieldFunctionObjects.so");
+
+    // Mandatory entries (runtime modifiable)
+    fields
+    (
+        phi
+    );
+    operation       sum;
+    regionType      patch;
+    name            outlet;
+
+    // // Optional entries (runtime modifiable)
+    // postOperation   none;
+    // weightField     alpha1;
+    // scaleFactor     1.0;
+    // writeArea       false;
+    // surfaceFormat   none;
+
+    // // Optional (inherited) entries
+    // writeFields     false;
+    // scalingFactor   1.0;
+    // writePrecision  8;
+    // writeToFile     true;
+    // useUserTime     true;
+    // region          region0;
+    // enabled         true;
+    // log             true;
+    // timeStart       0;
+    // timeEnd         1000;
+    // executeControl  timeStep;
+    // executeInterval 1;
+    // writeControl    timeStep;
+    // writeInterval   1;
+}
+
+// ************************************************************************* //
