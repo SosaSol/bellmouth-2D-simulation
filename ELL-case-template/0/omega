@@ -22,7 +22,7 @@ boundaryField
     inlet
     {
         type            turbulentMixingLengthFrequencyInlet;
-        mixingLength    0.4825; // 0.4825 m for Mw = 2
+        mixingLength    0.240; // 0.240 m for Mw = 1
         value           uniform 2.03; // is this used or placeholder?
     }
 
