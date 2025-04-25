@@ -46,12 +46,11 @@ runTimeModifiable false;
 
 functions
 {
-    #includeFunc massFlowRateOutlet
-    #includeFunc yPlus
-    #includeFunc turbulenceFields
-    #includeFunc pressure
-    #includeFunc residuals
-    #includeFunc solverInfo
+    // #include "include/massFlowRateOutlet"
+    // #include "include/yPlus"
+    // #include "include/turbulenceFields"
+    // #include "include/pressure"
+    // #include "include/solverInfo"
 }
 
 
