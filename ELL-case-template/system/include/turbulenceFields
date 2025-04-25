@@ -14,7 +14,7 @@ turbulenceFields1
 
     // Mandatory entries (runtime modifiable)
     // Either field or fields entries
-    fields          (R devRhoReff);
+    fields          (k epsilon omega nuTilda nut nuEff R devReff L I);
     // field           R;
 
     // Optional (inherited) entries
