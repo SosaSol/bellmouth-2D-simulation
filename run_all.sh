@@ -5,13 +5,28 @@
 # Default is serial.
 
 # ---------------------- Parse Run Mode ----------------------
-RUN_MODE=${1:-serial}
+RUN_MODE=${1:-serial}       # Default to serial if no argument is passed
+NP=${2:-12}                 # Default to 12 processors if none provided
+
 if [[ "$RUN_MODE" != "serial" && "$RUN_MODE" != "parallel" ]]; then
     echo "Invalid run mode: $RUN_MODE"
-    echo "Usage: $0 [serial|parallel]"
+    echo "Usage Examples:"
+    echo "  $0 "            # Runs in serial mode
+    echo "  $0  serial"     # Same as above
+    echo "  $0  parallel"   # Runs in parallel with default 12 cores
+    echo "  $0  parallel 8" # Runs in parallel with 12 cores
     exit 1
 fi
+
 echo "[INFO] Run mode: $RUN_MODE"
+if [[ "$RUN_MODE" == "parallel" ]]; then
+    echo "[INFO] Number of processors requested: $NP"
+fi
+# Validate core count if running in parallel
+if [[ "$RUN_MODE" == "parallel" && "$NP" -le 1 ]]; then
+    echo "[ERROR] Cannot run in parallel with $NP processor(s). Use at least 2."
+    exit 1
+fi
 
 # ---------------------- Constants ----------------------
 Kx=0.33;    Ky=0.33;
@@ -90,7 +105,7 @@ for Mw in $(seq $MW_START $MW_END); do
             # 3) Run Allrun (pass parallel flag if requested)
             echo "[INFO] Running OpenFOAM simulation ($RUN_MODE)"
             if [ "$RUN_MODE" = "parallel" ]; then
-                (cd "$case_path" && ./Allrun parallel)
+                (cd "$case_path" && ./Allrun parallel $NP)
             else
                 (cd "$case_path" && ./Allrun)
             fi

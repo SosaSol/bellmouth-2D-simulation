@@ -1,92 +1,107 @@
 #!/bin/bash
 
-#------------------------------------------------------------------------------
-# OpenFOAM Mesh Conversion, Simulation, and Post-processing Script
-# Version: 1.1
-# Supports optional parallel execution via argument: ./Allrun [serial|parallel]
-#------------------------------------------------------------------------------
+# ==============================================================================
+# OpenFOAM Simulation Launcher
+# Supports serial and parallel execution with core control
+# Usage: ./Allrun [serial|parallel] [N_CORES]
+# ==============================================================================
 
-# Detect parallel option
-RUN_MODE=${1:-serial}  # Default to serial if no argument is provided
-# Get the name of the current directory (case name)
-fname=$(basename "$PWD")
-echo "[INFO] Case name detected: $fname"
+# ------------------------------------------------------------------------------
+# 1. Configuration & Input Handling
+# ------------------------------------------------------------------------------
+
+RUN_MODE=${1:-serial}       # Default to serial if no argument is passed
+NP=${2:-12}                 # Default to 12 processors if none provided
+CASE_NAME=$(basename "$PWD")
+
+echo "[INFO] Case detected: $CASE_NAME"
 echo "[INFO] Run mode: $RUN_MODE"
 
-# Set number of processors for parallel execution
-NP=12
+if [[ "$RUN_MODE" == "parallel" ]]; then
+    echo "[INFO] Number of processors requested: $NP"
+fi
+
+# Validate core count if running in parallel
+if [[ "$RUN_MODE" == "parallel" && "$NP" -le 1 ]]; then
+    echo "[ERROR] Cannot run in parallel with $NP processor(s). Use at least 2."
+    exit 1
+fi
 
 # ------------------------------------------------------------------------------
-# Mesh Conversion
+# 2. Mesh Conversion
 # ------------------------------------------------------------------------------
 
-echo "[INFO] Converting mesh file to OpenFOAM format"
-msh_file="constant/triSurface/${fname}.msh"
+echo "[INFO] Converting GMSH mesh to OpenFOAM format"
+msh_file="constant/triSurface/${CASE_NAME}.msh"
 gmshToFoam "$msh_file" | tee log.gmshToFoam
 
 # ------------------------------------------------------------------------------
-# Update Boundary Conditions
+# 3. Boundary Condition Update
 # ------------------------------------------------------------------------------
 
-echo "[INFO] Updating boundary conditions"
+echo "[INFO] Updating boundary conditions using custom Python script"
 python3 ../../updateBoundaryConditions.py
 
 # ------------------------------------------------------------------------------
-# Mesh Validation
+# 4. Mesh Check
 # ------------------------------------------------------------------------------
 
-echo "[INFO] Checking mesh"
+echo "[INFO] Checking mesh quality"
 checkMesh | tee log.checkMesh
 
 # ------------------------------------------------------------------------------
-# Create foam.foam File
+# 5. Create foam.foam for GUI (optional)
 # ------------------------------------------------------------------------------
 
-echo "[INFO] Creating foam.foam file"
-touch "${fname}.foam"
+touch "${CASE_NAME}.foam"
+echo "[INFO] ${CASE_NAME}.foam file created for post-processing"
 
 # ------------------------------------------------------------------------------
-# Run Simulation
+# 6. Run Simulation
 # ------------------------------------------------------------------------------
 
-if [ "$RUN_MODE" = "parallel" ] && [ "$NP" -gt 1 ]; then
-  # Only decompose if >1
-  if [ ! -d "processor0" ]; then
-    decomposePar | tee log.decomposePar
-  fi
+if [[ "$RUN_MODE" == "parallel" ]]; then
+    echo "[INFO] Setting up for parallel run on $NP cores"
 
-  echo "[INFO] Running simpleFoam in parallel on $NP cores"
-  mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
+    # Dynamically update numberOfSubdomains in decomposeParDict
+    if grep -q "numberOfSubdomains" system/decomposeParDict; then # Check if entry exists
+        sed -i "s/^\(numberOfSubdomains\s*\).*;/\1$NP;/" system/decomposeParDict  # Update value
+        echo "[INFO] Updated numberOfSubdomains in decomposeParDict" 
+    else # Entry not found
+        echo "[ERROR] Entry 'numberOfSubdomains' not found in decomposeParDict" 
+        exit 1
+    fi
 
-  echo "[INFO] Reconstructing results"
-  reconstructPar | tee log.reconstructPar
+    # Decompose only if processor0 directory does not exist
+    if [[ ! -d "processor0" ]]; then
+        echo "[INFO] Decomposing domain"
+        decomposePar | tee log.decomposePar
+    fi
 
-elif [ "$RUN_MODE" = "parallel" ] && [ "$NP" -eq 1 ]; then
-  # Requested parallel, but NP=1
-  echo "[WARN] Parallel requested but NP=1; running serial instead"
-  simpleFoam | tee log.simpleFoam
+    echo "[INFO] Running simulation in parallel"
+    mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
+
+    echo "[INFO] Reconstructing decomposed fields"
+    reconstructPar | tee log.reconstructPar
 
 else
-  echo "[INFO] Running simpleFoam in serial"
-  simpleFoam | tee log.simpleFoam
+    echo "[INFO] Running simulation in serial"
+    simpleFoam -postProcess | tee log.simpleFoam
 fi
 
-# NP = 8
-# decomposePar | tee log.decomposePar
-# echo "[INFO] Running simpleFoam in parallel on 8 cores"
-# mpirun --use-hwthread-cpus -np 8 simpleFoam -parallel | tee log.simpleFoam
-
 # ------------------------------------------------------------------------------
-# Post-processing
+# 7. Optional Post-Processing (Uncomment as Needed)
 # ------------------------------------------------------------------------------
 
-echo "[INFO] Running post-processing"
-postProcess -func "patchIntegrate(name=outlet,U)"
-postProcess -func "patchAverage(name=inlet,p)"
-postProcess -func "patchAverage(name=outlet,p)"
+# echo "[INFO] Calculating outlet mass flow"
+# postProcess -func "patchIntegrate(name=outlet,U)"
 
+# echo "[INFO] Averaging pressure at inlet/outlet"
+# postProcess -func "patchAverage(name=inlet,p)"
+# postProcess -func "patchAverage(name=outlet,p)"
 
 # ------------------------------------------------------------------------------
-# End of script
+# End of Script
 # ------------------------------------------------------------------------------
 
+echo "[INFO] Simulation complete."
