@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail # Exit on error, unset variable, or pipe failure
+trap 'echo "[ERROR] Simulation interrupted"; exit 1' SIGINT # Handle Ctrl+C
 
 # ==============================================================================
 # OpenFOAM Simulation Launcher
@@ -12,18 +14,17 @@
 
 RUN_MODE=${1:-serial}       # Default to serial if no argument is passed
 NP=${2:-12}                 # Default to 12 processors if none provided
-CASE_NAME=$(basename "$PWD")
+CASE_PATH="$(pwd)"
+CASE_NAME="$(basename "$CASE_PATH")"
 
 echo "[INFO] Case detected: $CASE_NAME"
 echo "[INFO] Run mode: $RUN_MODE"
 
-if [[ "$RUN_MODE" == "parallel" ]]; then
-    echo "[INFO] Number of processors requested: $NP"
-fi
+[[ "$RUN_MODE" == "parallel" ]] && echo "[INFO] Number of processors: $NP"
 
 # Validate core count if running in parallel
 if [[ "$RUN_MODE" == "parallel" && "$NP" -le 1 ]]; then
-    echo "[ERROR] Cannot run in parallel with $NP processor(s). Use at least 2."
+    echo "[ERROR] Parallel mode needs at least 2 processors."
     exit 1
 fi
 
@@ -31,16 +32,24 @@ fi
 # 2. Mesh Conversion
 # ------------------------------------------------------------------------------
 
-echo "[INFO] Converting GMSH mesh to OpenFOAM format"
 msh_file="constant/triSurface/${CASE_NAME}.msh"
+if [[ ! -f "$msh_file" ]]; then
+    echo "[ERROR] Mesh file not found: $msh_file"
+    exit 1
+fi
+
+echo "[INFO] Converting GMSH mesh to OpenFOAM format"
 gmshToFoam "$msh_file" | tee log.gmshToFoam
 
 # ------------------------------------------------------------------------------
 # 3. Boundary Condition Update
 # ------------------------------------------------------------------------------
-
-echo "[INFO] Updating boundary conditions using custom Python script"
-python3 ../../updateBoundaryConditions.py
+if [[ -f "../../updateBoundaryConditions.py" ]]; then
+    echo "[INFO] Updating boundary conditions"
+    python3 ../../updateBoundaryConditions.py
+else
+    echo "[WARNING] Boundary condition script not found: ../../updateBoundaryConditions.py"
+fi
 
 # ------------------------------------------------------------------------------
 # 4. Mesh Check
@@ -79,14 +88,14 @@ if [[ "$RUN_MODE" == "parallel" ]]; then
     fi
 
     echo "[INFO] Running simulation in parallel"
-    mpirun --use-hwthread-cpus -np $NP simpleFoam -parallel | tee log.simpleFoam
+    mpirun -np "$NP" simpleFoam -parallel | tee log.simpleFoam
 
     echo "[INFO] Reconstructing decomposed fields"
     reconstructPar | tee log.reconstructPar
 
 else
     echo "[INFO] Running simulation in serial"
-    simpleFoam -postProcess | tee log.simpleFoam
+    simpleFoam | tee log.simpleFoam
 fi
 
 # ------------------------------------------------------------------------------
