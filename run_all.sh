@@ -1,7 +1,9 @@
 #!/bin/bash
+set -euo pipefail # Exit on error, unset variable, or pipe failure
+trap 'echo "[ERROR] Script interrupted"; exit 1' SIGINT # Handle Ctrl+C
 
 # Usage:
-#   ./run_all.sh [serial|parallel]
+#   ./run_all.sh [serial|parallel] [number of cores]
 # Default is serial.
 
 # ---------------------- Parse Run Mode ----------------------
@@ -10,18 +12,13 @@ NP=${2:-12}                 # Default to 12 processors if none provided
 
 if [[ "$RUN_MODE" != "serial" && "$RUN_MODE" != "parallel" ]]; then
     echo "Invalid run mode: $RUN_MODE"
-    echo "Usage Examples:"
-    echo "  $0 "            # Runs in serial mode
-    echo "  $0  serial"     # Same as above
-    echo "  $0  parallel"   # Runs in parallel with default 12 cores
-    echo "  $0  parallel 8" # Runs in parallel with 12 cores
+    echo "Usage: $0 [serial|parallel] [nCores]"
     exit 1
 fi
 
 echo "[INFO] Run mode: $RUN_MODE"
-if [[ "$RUN_MODE" == "parallel" ]]; then
-    echo "[INFO] Number of processors requested: $NP"
-fi
+[[ "$RUN_MODE" == "parallel" ]] && echo "[INFO] Number of processors: $NP"
+
 # Validate core count if running in parallel
 if [[ "$RUN_MODE" == "parallel" && "$NP" -le 1 ]]; then
     echo "[ERROR] Cannot run in parallel with $NP processor(s). Use at least 2."
@@ -34,14 +31,15 @@ r=0.010;    t=0.005
 L=0.300
 xmin=0.0;   ymin=0.0
 xmax=25.0;  ymax=25.0
-nt=15
+nt=12
 
 MW_START=2; MW_END=12
 MB_START=2; MB_END=12
 
-CASE_TEMPLATE="ELL-case-template"
-OUTPUT_DIR="./outputs"
-LOG_DIR="./logs"
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+CASE_TEMPLATE="${SCRIPT_DIR}/ELL-case-template"
+OUTPUT_DIR="${SCRIPT_DIR}/outputs"
+LOG_DIR="${SCRIPT_DIR}/logs"
 
 # Create directories if they don't exist
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
@@ -52,28 +50,28 @@ COUNTER=1
 
 SECONDS=0
 echo "##################################################"
-echo "# Starting parametric sweep"
-echo "# Total cases to run: ${TOTAL_ITER}"
-echo "# Time started: $(date)"
+echo "# Parametric sweep started: $(date)"
+echo "# Total cases: $TOTAL_ITER"
 echo "##################################################"
 echo
 
+# ---------------------- Main Loop ----------------------
 # Loop over Mw and Mb
 for Mw in $(seq $MW_START $MW_END); do
     for Mb in $(seq $MB_START $MB_END); do
         fname=$(printf "ELL-%d-%d-%.0f-%.0f-%.0f-%.0f-%.0f" \
             "$Mw" "$Mb" \
-            "$(echo "$Kx * 100" | bc -l)" \
-            "$(echo "$Ky * 100" | bc -l)" \
-            "$(echo "$r * 1000" | bc -l)" \
-            "$(echo "$L * 1000" | bc -l)" \
-            "$(echo "$t * 1000" | bc -l)" )
+            "$(awk "BEGIN{printf \"%.0f\", $Kx * 100}")" \
+            "$(awk "BEGIN{printf \"%.0f\", $Ky * 100}")" \
+            "$(awk "BEGIN{printf \"%.0f\", $r * 1000}")" \
+            "$(awk "BEGIN{printf \"%.0f\", $L * 1000}")" \
+            "$(awk "BEGIN{printf \"%.0f\", $t * 1000}")")
 
         case_path="${OUTPUT_DIR}/${fname}"
         log_file="${LOG_DIR}/${fname}.log"
         {
             echo "=================================================="
-            echo "Running case ${COUNTER}/${TOTAL_ITER}: $fname"
+            echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $fname"
             echo "=================================================="
         
             # 1) Copy template if it doesn't exist
@@ -82,16 +80,16 @@ for Mw in $(seq $MW_START $MW_END); do
                 cp -r "${CASE_TEMPLATE}" "$case_path"
                 chmod +x "${case_path}/Allrun"
             else
-                echo "[SKIP] Case folder already exists"
+                echo "[SKIP] Case folder exists: $case_path"
             fi
 
             # 2) Generate mesh if it doesn't exists
             msh_file="${case_path}/constant/triSurface/${fname}.msh"
-            if ls $msh_file 1> /dev/null 2>&1; then
+            if [ -f "$msh_file" ]; then # mesh exists
                 echo "[SKIP] Mesh already exists for $fname"
-            else
+            else # mesh doesn't exist
                 save_dir="${case_path}/constant/triSurface"
-                echo "[INFO] Generating mesh for $fname"
+                echo "[INFO] Generating mesh..."
                 python3 mesh.py \
                     --Mw $Mw --Mb $Mb \
                     --Kx $Kx --Ky $Ky \
@@ -102,13 +100,15 @@ for Mw in $(seq $MW_START $MW_END); do
                     --sd $save_dir
             fi
 
-            # 3) Run Allrun (pass parallel flag if requested)
-            echo "[INFO] Running OpenFOAM simulation ($RUN_MODE)"
-            if [ "$RUN_MODE" = "parallel" ]; then
-                (cd "$case_path" && ./Allrun parallel $NP)
+            # 3) Run Allrun
+            echo "[INFO] Running OpenFOAM simulation..."
+            pushd "$case_path" > /dev/null
+            if [[ "$RUN_MODE" == "parallel" ]]; then
+            ./Allrun parallel "$NP"
             else
-                (cd "$case_path" && ./Allrun)
+            ./Allrun
             fi
+            popd > /dev/null
 
             echo "[DONE] Case finished: $fname"
             echo
@@ -117,16 +117,17 @@ for Mw in $(seq $MW_START $MW_END); do
     done
 done
 
+# ---------------------- End Timing ----------------------
 ELAPSED_TIME=$SECONDS
 HOURS=$((ELAPSED_TIME / 3600))
 MINUTES=$(((ELAPSED_TIME % 3600) / 60))
-SECONDS_REMAINING=$((ELAPSED_TIME % 60))
+SECONDS=$((ELAPSED_TIME % 60))
 
 echo
 echo "##################################################"
-echo "# All cases completed!"
-echo "# Total cases run: ${TOTAL_ITER}"
-echo "# Time finished: $(date)"
-echo "# Elapsed time: ${HOURS}h ${MINUTES}m ${SECONDS_REMAINING}s"
+echo "# All ${TOTAL_ITER} cases finished: $(date)"
+echo "# Total cases run: "
+echo "# Time finished: "
+echo "# Total runtime: ${HOURS}h ${MINUTES}m ${SECONDS_REMAINING}s"
 echo "##################################################"
 
