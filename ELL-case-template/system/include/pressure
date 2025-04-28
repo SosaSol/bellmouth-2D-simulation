@@ -30,6 +30,49 @@ totalPressure1  // Total
     writeControl    writeTime;
 }
 
+
+averageTotalPressureInlet1
+{
+    // Mandatory entries (unmodifiable)
+    type            surfaceFieldValue;
+    functionObjectLibs ("libfieldFunctionObjects.so");
+
+    // Mandatory entries (runtime modifiable)
+    fields          ( total(p) );
+    operation       areaAverage;
+    regionType      patch;
+    name            inlet;
+
+    // Optional entries (runtime modifiable)
+    surfaceFormat   none;
+
+    // Optional (inherited) entries
+    writeFields     true;
+    executeControl  writeTime;
+    writeControl    writeTime;
+}
+
+averageTotalPressureOutlet1
+{
+    // Mandatory entries (unmodifiable)
+    type            surfaceFieldValue;
+    functionObjectLibs ("libfieldFunctionObjects.so");
+
+    // Mandatory entries (runtime modifiable)
+    fields          ( total(p) );
+    operation       areaAverage;
+    regionType      patch;
+    name            outlet;
+
+    // Optional entries (runtime modifiable)
+    surfaceFormat   none;
+
+    // Optional (inherited) entries
+    writeFields     true;
+    executeControl  writeTime;
+    writeControl    writeTime;
+}
+
 staticCoeff1 // Static
 {
     // Mandatory entries (unmodifiable)

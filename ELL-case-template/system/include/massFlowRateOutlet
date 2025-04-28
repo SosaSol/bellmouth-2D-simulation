@@ -13,15 +13,12 @@ massFlowRateOutlet1
     functionObjectLibs ("libfieldFunctionObjects.so");
 
     // Mandatory entries (runtime modifiable)
-    fields
-    (
-        phi
-    );
+    fields          (phi);
     operation       sum;
     regionType      patch;
     name            outlet;
 
-    // // Optional entries (runtime modifiable)
+    // Optional entries (runtime modifiable)
     // postOperation   none;
     // weightField     alpha1;
     // scaleFactor     1.0;
