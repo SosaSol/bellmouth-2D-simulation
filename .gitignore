@@ -1,6 +1,7 @@
 # Ignore simulation outputs and logs
 logs/
 outputs/
+postProcessingOutputs/
 
 # macOS
 .DS_Store

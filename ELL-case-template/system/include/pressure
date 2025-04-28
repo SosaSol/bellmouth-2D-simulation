@@ -6,7 +6,31 @@
 |    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 
-pressure1 // Static
+totalPressure1  // Total
+{
+    // Mandatory entries (unmodifiable)
+    type            pressure;
+    libs            (fieldFunctionObjects);
+
+    // Mandatory entries (runtime modifiable)
+    mode            total;
+
+    // Optional entries (runtime modifiable)
+    p               p;
+    U               U;
+    rho             rhoInf;
+    rhoInf          1.204; // enabled if rho=rhoInf
+    pRef            101325;
+    // hydroStaticMode none;
+    // g               (0 -9.81 0); // enabled if hydroStaticMode != none
+    // hRef            0.0;         // enabled if hydroStaticMode != none
+    // pInf            0.0;
+    // UInf            (16 0 0);
+    executeControl  writeTime;
+    writeControl    writeTime;
+}
+
+staticCoeff1 // Static
 {
     // Mandatory entries (unmodifiable)
     type            pressure;
@@ -19,8 +43,8 @@ pressure1 // Static
     p               p;
     U               U;
     rho             rho;
-    rhoInf          1.225; // enabled if rho=rhoInf
-    // pRef            0.0;
+    rhoInf          1.204; // enabled if rho=rhoInf
+    pRef            101325;
     // hydroStaticMode none;
     // g               (0 -9.81 0); // enabled if hydroStaticMode != none
     // hRef            0.0;         // enabled if hydroStaticMode != none
@@ -30,7 +54,7 @@ pressure1 // Static
     writeControl    writeTime;
 }
 
-pressure2  // Total
+totalCoeff1  // Total
 {
     // Mandatory entries (unmodifiable)
     type            pressure;
@@ -43,8 +67,8 @@ pressure2  // Total
     p               p;
     U               U;
     rho             rho;
-    rhoInf          1.225; // enabled if rho=rhoInf
-    // pRef            0.0;
+    rhoInf          1.204; // enabled if rho=rhoInf
+    pRef            101325;
     // hydroStaticMode none;
     // g               (0 -9.81 0); // enabled if hydroStaticMode != none
     // hRef            0.0;         // enabled if hydroStaticMode != none
