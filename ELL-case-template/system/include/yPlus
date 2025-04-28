@@ -21,9 +21,9 @@ yPlus1
     // log             true;
     // timeStart       0;
     // timeEnd         1000;
-    // executeControl  timeStep;
+    executeControl  writeTime;
     // executeInterval 1;
-    // writeControl    timeStep;
+    writeControl    writeTime;
     // writeInterval   1;
 }
 

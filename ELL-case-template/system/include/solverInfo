@@ -25,6 +25,8 @@ solverInfo1
 
     // Optional (inherited) entries
     // ...
+    executeControl  writeTime;
+    writeControl    writeTime;
 }
 
 // ************************************************************************* //
