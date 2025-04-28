@@ -1,5 +1,5 @@
 gmsh
 libglu1-mesa
 libxft2
-
+libgl1
 scipy
