@@ -28,10 +28,10 @@ fi
 # ---------------------- Constants ----------------------
 Kx=0.33;    Ky=0.33;
 r=0.010;    t=0.005
-L=0.300
+L=0.339
 xmin=0.0;   ymin=0.0
 xmax=25.0;  ymax=25.0
-nt=12
+nt=$NP
 
 MW_START=2; MW_END=12
 MB_START=2; MB_END=12

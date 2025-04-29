@@ -34,7 +34,7 @@ def parse_args():
 
     parser.add_argument("--t", type=float, default=5e-3, help="Wall thickness (in meters)")
 
-    parser.add_argument("--L", type=float, default=0.3, help="Length of straight section (in meters)")
+    parser.add_argument("--L", type=float, default=0.339, help="Length of straight section (in meters)")
 
     parser.add_argument("--xmin", type=float, default=0, help="X min (in meters)")
     parser.add_argument("--ymin", type=float, default=0, help="Y min (in meters)")

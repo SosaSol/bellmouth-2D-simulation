@@ -39,7 +39,7 @@ def parse_args():
     parser.add_argument("--r", type=float, default=10e-3, help="Radius of curvature (in meters)")
     parser.add_argument("--t", type=float, default=5e-3, help="Wall thickness (in meters)")
 
-    parser.add_argument("--L", type=float, default=0.3, help="Length of straight section (in meters)")
+    parser.add_argument("--L", type=float, default=0.339, help="Length of straight section (in meters)")
 
     parser.add_argument("--xmin", type=float, default=0, help="X min (in meters)")
     parser.add_argument("--ymin", type=float, default=0, help="Y min (in meters)")
@@ -195,6 +195,7 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     u_tau = U_inf * math.sqrt(Cf / 2)       # Friction velocity
     yp = y_plus * nu / u_tau                # First cell height for desired y+
     y1 = 2*yp                               # Total height of the first cell 
+    y1 = y1 / 7                             # Ajust from simulation results
 
     # Growth Ratio
     delta99 = 4.91*x/Re_x**0.5 if Re_x<5e5 else 0.38*x/Re_x**0.2 # Boundary layer thickness
