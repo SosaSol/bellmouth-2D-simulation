@@ -17,7 +17,6 @@ solverInfo1
         p
         k
         omega
-        nut
     );
 
     // Optional entries
