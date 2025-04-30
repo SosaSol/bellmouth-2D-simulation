@@ -1,153 +1,181 @@
-import os
+#!/usr/bin/env python3
+"""
+Post-process OpenFOAM outputs: extract head losses, mass flow rates, and max yPlus
+from each case under ./outputs/<caseName>/postProcessing, then assemble and
+write CSV tables under ./postProcessingOutputs.
+"""
+
+import sys
+from pathlib import Path
 import glob
+
 import numpy as np
 import pandas as pd
 
-### Functions
+# ─── Configuration ─────────────────────────────────────────────────────────────
+OUTPUTS_DIR = Path("outputs")
+POSTPROC_DIR = Path("postProcessingOutputs")
+POSTPROC_DIR.mkdir(exist_ok=True)
 
-def read_last_value(filepath: str) -> float:
-    """Read the last value from a file, ignoring comments and empty lines."""
-    with open(filepath, 'r') as f:
-        lines = [line for line in f if not line.startswith('#') and line.strip()]
-    if not lines:
-        raise ValueError(f"No valid data found in {filepath}")
-    return float(lines[-1].split()[-1])
+# ─── I/O HELPERS ───────────────────────────────────────────────────────────────
 
-def read_yplus(filepath: str) -> float:
-    """Read the last Max yPlus value from a file, ignoring comments and empty lines."""
-    with open(filepath, 'r') as f:
-        lines = [line for line in f if not line.startswith('#') and line.strip()]
-    if not lines:
-        raise ValueError(f"No valid data found in {filepath}")
-    return float(lines[-1].split()[-2])
+def read_last_line(path: Path) -> str:
+    """
+    Return the last non-empty, non-comment line from `path`.
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found")
+    # scan backwards in file
+    with path.open() as f:
+        f.seek(0, 2)
+        pos = f.tell()
+        buffer = ""
+        while pos > 0:
+            pos -= 1
+            f.seek(pos)
+            char = f.read(1)
+            if char == "\n":
+                line = buffer[::-1].strip()
+                if line and not line.startswith("#"):
+                    return line
+                buffer = ""
+            else:
+                buffer += char
+        # fallback: read all lines
+        f.seek(0)
+        valid = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+        if valid:
+            return valid[-1]
+    raise ValueError(f"No data in {path}")
 
-def extract_values(folder_path: str, folder_name: str, geometry_type: str) -> tuple[float, float, float] | None:
-    """Extract head loss, mass flow, and max yPlus from post-processing files."""
+def read_value(path: Path, index: int = -1) -> float:
+    """
+    Read a float from the last valid line of `path`, taking token at `index`.
+    """
+    line = read_last_line(path)
+    tokens = line.split()
+    if len(tokens) < abs(index) + 1:
+        raise ValueError(f"Not enough tokens in {path}: {tokens}")
+    return float(tokens[index])
+
+# ─── EXTRACTION ────────────────────────────────────────────────────────────────
+
+def extract_case_data(case_dir: Path):
+    """
+    From one case directory, extract:
+      - iteration (first token of solverInfo.dat)
+      - head loss (p_inlet - p_outlet)
+      - mass flow (last token of massFlowRateOutlet1)
+      - max yPlus (second-last token of yPlus.dat)
+    Returns (iteration, head_loss, massflow, max_yplus) or None on error.
+    """
+
     try:
-        inlet_file  = glob.glob(os.path.join(folder_path, 'postProcessing/averageTotalPressureInlet1/0/surfaceFieldValue.dat'))[0]
-        outlet_file = glob.glob(os.path.join(folder_path, 'postProcessing/averageTotalPressureOutlet1/0/surfaceFieldValue.dat'))[0]
-        massflow_file = glob.glob(os.path.join(folder_path, 'postProcessing/massFlowRateOutlet1/0/surfaceFieldValue.dat'))[0]
-        yplus_file = glob.glob(os.path.join(folder_path, 'postProcessing/yPlus1/0/yPlus.dat'))[0]
+        base = case_dir / "postProcessing"
+        # find each file
+        solver = next(base.glob("solverInfo1/0/solverInfo.dat"))
+        p_in   = next(base.glob("averageTotalPressureInlet1/0/surfaceFieldValue.dat"))
+        p_out  = next(base.glob("averageTotalPressureOutlet1/0/surfaceFieldValue.dat"))
+        mflow  = next(base.glob("massFlowRateOutlet1/0/surfaceFieldValue.dat"))
+        yplus  = next(base.glob("yPlus1/0/yPlus.dat"))
+        # read data
+        it      = read_value(solver, 0)
+        pin     = read_value(p_in,   -1)
+        pout    = read_value(p_out,  -1)
+        mrate   = read_value(mflow,  -1)
+        y_plus  = read_value(yplus,  -2)
+        return it, (pin - pout), mrate, y_plus
 
-        p_inlet = read_last_value(inlet_file)
-        p_outlet = read_last_value(outlet_file)
-        massflow = read_last_value(massflow_file)
-        max_yplus = read_yplus(yplus_file)
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Failed to process {case_dir.name}")
+        traceback.print_exc()
+        return None
 
-        delta_p_total = p_inlet - p_outlet
+
+# ─── MAIN WORKFLOW ────────────────────────────────────────────────────────────
+
+def main():
+    if not OUTPUTS_DIR.is_dir():
+        print(f"[ERROR] Outputs folder not found: {OUTPUTS_DIR}")
+        sys.exit(1)
+
+    # gather all case subdirectories
+    cases = [p for p in OUTPUTS_DIR.iterdir() if p.is_dir()]
+    print(f"Found {len(cases)} cases in {OUTPUTS_DIR}")
+
+    # data structure: { (geom, params_key): { (Mb, Mw): (head, mflow, yplus) } }
+    results = {}
+
+    for case in sorted(cases):
+        name = case.name
+        print(f"\nProcessing case: {name}")
+        # determine geometry type & parameters key
+        if name.startswith("ELL-"):
+            _, Mw, Mb, Kx, Ky, r, L, t = name.split("-")
+            geom, key, dims = "ELL", f"{Kx}_{Ky}_{r}_{L}", (int(Mb), int(Mw))
+        elif name.startswith("IN-"):
+            _, Mw, L, t = name.split("-")
+            geom, key, dims = "IN", L, (1, int(Mw))
+        elif name.startswith("RAD-"):
+            _, Mw, Mb, K, L, t = name.split("-")
+            geom, key, dims = "RAD", f"{K}_{L}", (int(Mb), int(Mw))
+        else:
+            print(f"[WARN] Unknown pattern: {name}, skipping")
+            continue
+        
+        data = extract_case_data(case)
+        if data is None:
+            continue
+
+        
+        n_iter, head_loss, massflow, max_yplus = data
 
         # Reporting
-        print(f"Geometry: {folder_name} ({geometry_type})")
+        print(f"  - Iterations              : {int(n_iter)}")
         print(f"  - Mass flow rate (kg/s)   : {massflow:.4f}")
-        print(f"  - Head loss (Pa)          : {delta_p_total:.2f}")
+        print(f"  - Head loss (Pa)          : {head_loss:.2f}")
         print(f"  - Max yPlus               : {max_yplus:.2f}")
-
         if max_yplus > 5.0:
             print("  WARNING: yPlus > 5 detected!")
         elif max_yplus >= 1.0:
             print("  WARNING: yPlus not fully below 1!")
-        else:
-            print("  OK: yPlus all below 1.")
-        print("-" * 60)
+        
+        results.setdefault((geom, key), {})[dims] = {
+            "head_loss": head_loss,
+            "massflow":  massflow,
+            "max_yplus": max_yplus
+        }
 
-        return delta_p_total, massflow, max_yplus
 
-    except (IndexError, FileNotFoundError) as e:
-        print(f"Missing or incomplete post-processing data in {folder_name}: {e}")
-    except Exception as e:
-        print(f"Error processing {folder_name}: {e}")
-    return None
+    # for each geometry+params, build and save DataFrames
+    for (geom, key), table in results.items():
+        # build index/columns
+        Mb_vals = sorted({mb for mb, _ in table})
+        Mw_vals = sorted({mw for _, mw in table})
+        idx = pd.Index(Mb_vals, name="Mb")
+        cols = pd.Index(Mw_vals, name="Mw")
 
-def ensure_dir(path: str) -> None:
-    """Ensure that a directory exists, creating it if necessary."""
-    if not os.path.exists(path):
-        os.makedirs(path)
-        print(f"Created directory: {path}")
+        # initialize empty DataFrames
+        df_head  = pd.DataFrame(index=idx, columns=cols, dtype=float)
+        df_mflow = df_head.copy()
+        df_yplus = df_head.copy()
 
-### Main script
+        # fill
+        for (mb, mw), vals in table.items():
+            df_head.at[mb, mw]  = vals["head_loss"]
+            df_mflow.at[mb, mw] = vals["massflow"]
+            df_yplus.at[mb, mw] = vals["max_yplus"]
 
-outputs_dir = 'outputs'
-postprocessing_dir = 'postProcessingOutputs'
-ensure_dir(postprocessing_dir)
+        # output CSVs
+        base = f"{geom}_{key}"
+        df_head.to_csv(POSTPROC_DIR / f"{base}_head_losses.csv")
+        df_mflow.to_csv(POSTPROC_DIR / f"{base}_massflow.csv")
+        df_yplus.to_csv(POSTPROC_DIR / f"{base}_max_yplus.csv")
 
-if not os.path.exists(outputs_dir):
-    print(f"Error: '{outputs_dir}' folder not found.")
-    exit(1)
+        print(f"[OK] Wrote {geom}/{key} tables to {POSTPROC_DIR}")
 
-folders = [f for f in os.listdir(outputs_dir) if os.path.isdir(os.path.join(outputs_dir, f))]
-print(f"Found {len(folders)} geometries.\n")
+    print("\nAll post-processing complete.")
 
-results = {}
-
-for folder in folders:
-    folder_path = os.path.join(outputs_dir, folder)
-
-    if folder.startswith('ELL-'):
-        geometry_type = 'ELL'
-        parts = folder.split('-')
-        if len(parts) != 8:
-            print(f"Unexpected ELL folder format: {folder}. Skipping.")
-            continue
-        _, Mw, Mb, Kx, Ky, r, L, t = parts
-        Mb, Mw = int(Mb), int(Mw)
-        params_key = f"{Kx}_{Ky}_{r}_{L}"
-
-    elif folder.startswith('IN-'):
-        geometry_type = 'IN'
-        parts = folder.split('-')
-        if len(parts) != 5:
-            print(f"Unexpected IN folder format: {folder}. Skipping.")
-            continue
-        _, Mw, L, t = parts
-        Mb = 1
-        params_key = f"{L}"
-
-    elif folder.startswith('RAD-'):
-        geometry_type = 'RAD'
-        parts = folder.split('-')
-        if len(parts) != 6:
-            print(f"Unexpected RAD folder format: {folder}. Skipping.")
-            continue
-        _, Mw, Mb, K, L, t = parts
-        Mb, Mw = int(Mb), int(Mw)
-        params_key = f"{K}_{L}"
-
-    else:
-        print(f"Unknown geometry type in folder {folder}. Skipping.")
-        continue
-
-    result = extract_values(folder_path, folder, geometry_type)
-    if result is None:
-        print(f"Skipping folder {folder} due to data issues.\n")
-        continue
-
-    delta_p_total, massflow, max_yplus = result
-    key = (geometry_type, params_key)
-    results.setdefault(key, {})[(Mb, Mw)] = {
-        'head_loss': delta_p_total,
-        'massflow': massflow,
-        'max_yplus': max_yplus
-    }
-
-# Save results into labeled DataFrames
-for (geom, param_key), data in results.items():
-    mbmw_pairs = list(data.keys())
-    Mb_values = sorted(set(mb for mb, mw in mbmw_pairs))
-    Mw_values = sorted(set(mw for mb, mw in mbmw_pairs))
-
-    # Create empty DataFrames
-    head_loss_df = pd.DataFrame(index=Mb_values, columns=Mw_values, dtype=float)
-    massflow_df  = pd.DataFrame(index=Mb_values, columns=Mw_values, dtype=float)
-    yplus_df     = pd.DataFrame(index=Mb_values, columns=Mw_values, dtype=float)
-
-    for (mb, mw), vals in data.items():
-        head_loss_df.loc[mb, mw] = vals['head_loss']
-        massflow_df.loc[mb, mw] = vals['massflow']
-        yplus_df.loc[mb, mw] = vals['max_yplus']
-
-    base_filename = f"{geom}_{param_key}"
-    head_loss_df.to_csv(os.path.join(postprocessing_dir, f"head_losses_{base_filename}.csv"))
-    massflow_df.to_csv(os.path.join(postprocessing_dir, f"massflow_{base_filename}.csv"))
-    yplus_df.to_csv(os.path.join(postprocessing_dir, f"max_yplus_{base_filename}.csv"))
-
-print("\nPost-processing complete. CSV files saved in 'postProcessingOutputs/'.")
+if __name__ == "__main__":
+    main()
