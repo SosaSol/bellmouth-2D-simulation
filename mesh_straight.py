@@ -1,8 +1,6 @@
 # standard library
-import os
 import sys
 import argparse
-import multiprocessing
 from pathlib import Path
 import logging
 import math
@@ -12,7 +10,6 @@ from scipy.optimize import newton
 import gmsh
 
 # project constants
-MM = 1e-3
 MODULE_WIDTH = 240.0e-3  # m
 GAP = 2.5e-3  # m
 
@@ -114,11 +111,12 @@ def create_geometry(
     curve_tags.append(add_line(pts[4], pts[5]))     # straight top wall
     curve_tags.append(add_line(pts[5], pts[6]))     # right vertical
     curve_tags.append(add_line(pts[6], pts[7]))     # top    
-    curve_tags.append(add_line(pts[7], pts[0]))     # left vertical
+    # Add the last line to close the loop
+    curve_tags.append(add_line(pts[-1], pts[0]))     # left vertical
 
     # Create surface
     loop_tag = gmsh.model.occ.addCurveLoop(curve_tags)
-    surface = gmsh.model.occ.addPlaneSurface([loop_tag])
+    surface  = gmsh.model.occ.addPlaneSurface([loop_tag])
     gmsh.model.occ.synchronize()
 
     return surface, curve_tags, edge_points
@@ -153,23 +151,25 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     u_tau = U_inf * math.sqrt(Cf / 2)       # Friction velocity
     yp = y_plus * nu / u_tau                # First cell height for desired y+
     y1 = 2*yp                               # Total height of the first cell 
+    y1 = y1 / 2                             # Ajust from simulation results
 
     # Growth Ratio
     delta99 = 4.91*x/Re_x**0.5 if Re_x<5e5 else 0.38*x/Re_x**0.2 # Boundary layer thickness
-    r0 = 5                          # Initial guess for growth ratio
+    delta99 = delta99 * 1.00    # Adjust from simulation results
+    r0 = 1.5                    # Initial guess for growth ratio
     
     def func(r:float) -> float:
         return  r**n_layers -r*(delta99/y1) + (delta99/y1-1)
     def fprime(r:float) -> float:
         return n_layers*r**(n_layers-1) - (delta99/y1)
     
-    expansion_ratio = newton(func=func, x0=r0,fprime=fprime, tol=1e-5, maxiter=100)  # Solve for growth ratio using Newton's method
+    expansion_ratio = newton(func=func, x0=r0,fprime=fprime, tol=1e-4, maxiter=200)  # Solve for growth ratio using Newton's method
     # truncate expansion ration to two decimal places
     expansion_ratio = math.trunc(expansion_ratio*100)/100
 
     return  y1, delta99, expansion_ratio
 
-def apply_boundary_layer(curve_tags:list, edge_points:list, x:float, n_layers:int=20, y_plus:float=0.95,  U_inf:float=16) -> None:
+def apply_boundary_layer(curve_tags:list, edge_points:tuple[float, float], x:float, n_layers:int=20, y_plus:float=0.95,  U_inf:float=16) -> None:
     """
     Apply a structured boundary layer on selected curves and end points.
 
@@ -181,8 +181,12 @@ def apply_boundary_layer(curve_tags:list, edge_points:list, x:float, n_layers:in
     - y_plus: Desired dimensionless first cell height
     - U_inf: Freestream velocity [m/s]
     """
+
+    logging.info(f"edge_points : {edge_points}")
+    logging.info(f"curve_tags  : {curve_tags}")
+    
     y1, bl_thickness, expansion_ratio = boundaryLayerParameters(U_inf=U_inf, x=x, y_plus=y_plus, n_layers=n_layers)
-    logging.info(f"Boundary layer parameters: y1={y1:.2e}, bl_thickness={bl_thickness:.2e}, expansion_ratio={expansion_ratio}")
+    logging.info(f"Boundary layer parameters: y1={y1:.2e}, bl_thickness={bl_thickness:.2e}, expansion_ratio={expansion_ratio}, num_layers={n_layers}")
 
     bl = gmsh.model.mesh.field.add("BoundaryLayer")
     gmsh.model.mesh.field.setNumbers(bl, "CurvesList", curve_tags)  # Curves for BL
@@ -198,11 +202,15 @@ def apply_boundary_layer(curve_tags:list, edge_points:list, x:float, n_layers:in
 # -----------------------------
 # Mesh Refinement
 # -----------------------------
-def refine_mesh(curve_tags:list, xmax:float, ymin:float, Di:float, L:float) -> None:
+def refine_mesh(curve_tags:list, xmax:float, ymin:float, Di:float, a:float, b:float, L:float,
+                sizeThreshold:float=2e-3, sizeBox:float=2e-2) -> None:
     """
     Add distance + threshold + box fields and combine for smooth grading.
     """
-    # Distance from bellmouth wall
+    # Mesh zie from curvature
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 60)
+    
+    # Distance from walls
     dist = gmsh.model.mesh.field.add("Distance")
     gmsh.model.mesh.field.setNumbers(dist, "EdgesList", curve_tags)
     gmsh.model.mesh.field.setNumber(dist, "Sampling", 1e6)
@@ -210,26 +218,31 @@ def refine_mesh(curve_tags:list, xmax:float, ymin:float, Di:float, L:float) -> N
     # Threshold based on distance
     thr = gmsh.model.mesh.field.add("Threshold")
     gmsh.model.mesh.field.setNumber(thr, "InField", dist)
-    gmsh.model.mesh.field.setNumber(thr, "SizeMin", 1e-3)
+    gmsh.model.mesh.field.setNumber(thr, "SizeMin", sizeThreshold)
     gmsh.model.mesh.field.setNumber(thr, "SizeMax", 2)
-    gmsh.model.mesh.field.setNumber(thr, "DistMin", 0.02)
-    gmsh.model.mesh.field.setNumber(thr, "DistMax", 0.03)
+    gmsh.model.mesh.field.setNumber(thr, "DistMin", 0.03)
+    gmsh.model.mesh.field.setNumber(thr, "DistMax", 5)
 
     # Box refinement near inlet corner
+    XMin = xmax - L - a - 0.3
+    YMax = ymin + Di/2 + b + 0.1
+    logging.info(f"Box refinement near inlet corner: {XMin:.2f} < x < {xmax:.2f}, {ymin:.2f} < y < {YMax:.2f}")
     box = gmsh.model.mesh.field.add("Box")
-    gmsh.model.mesh.field.setNumber(box, "VIn", 1e-2)
+    gmsh.model.mesh.field.setNumber(box, "VIn", sizeBox)
     gmsh.model.mesh.field.setNumber(box, "VOut", 1)
-    gmsh.model.mesh.field.setNumber(box, "XMin", xmax-L-1)
+    gmsh.model.mesh.field.setNumber(box, "XMin", XMin)
     gmsh.model.mesh.field.setNumber(box, "XMax", xmax)
     gmsh.model.mesh.field.setNumber(box, "YMin", ymin)
-    gmsh.model.mesh.field.setNumber(box, "YMax", ymin+Di/2+0.5)
+    gmsh.model.mesh.field.setNumber(box, "YMax", YMax)
     gmsh.model.mesh.field.setNumber(box, "ZMin", -2)
     gmsh.model.mesh.field.setNumber(box, "ZMax",  2)
     gmsh.model.mesh.field.setNumber(box, "Thickness", 10)
 
+    fields = [thr, box]
+    
     # Combine fields
     mfield = gmsh.model.mesh.field.add("Min")
-    gmsh.model.mesh.field.setNumbers(mfield, "FieldsList", [thr, box])
+    gmsh.model.mesh.field.setNumbers(mfield, "FieldsList", fields)
     gmsh.model.mesh.field.setAsBackgroundMesh(mfield)
     gmsh.model.occ.synchronize()
 
@@ -340,22 +353,29 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
                 xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax,
                 nt=nt, fname=fname)
     # Create geometry
-    surf, curves, edgePoints = create_geometry(Mw, t, L, xmin, ymin, xmax, ymax)
+    surf, curves, edge_points = create_geometry(Mw, t, L, xmin, ymin, xmax, ymax)
     # Apply boundary layer
-    apply_boundary_layer(curve_tags=curves[2:5], edge_points=edgePoints, x=L, n_layers=20, y_plus=0.95, U_inf=16)
+    apply_boundary_layer(curve_tags=curves[2:5], edge_points=edge_points, x=L, n_layers=19, y_plus=0.95, U_inf=16)
     # Refine mesh
     Di = compute_geometry_parameters(Mw)
-    refine_mesh(curve_tags=curves[2:5], xmax=xmax, ymin=ymin, Di=Di, L=L)
+    logging.info("Refining mesh...")
+    refine_mesh(curve_tags=curves[2:5],
+                xmax=xmax, ymin=ymin, Di=Di, a=0.0, b=0.0, L=L,
+                sizeThreshold=2e-3, sizeBox=2e-2)
+    
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
 
     # Generate 2D mesh
     gmsh.option.setNumber("Mesh.Algorithm", 6)  # Frontal-Delaunay
     gmsh.model.mesh.generate(2)
 
     # Extrude and define physical groups
+    logging.info("Extruding and defining physical groups...")
     extrude_and_group(surface=surf)
 
-    # if '-nopopup' not in sys.argv:
-    #     gmsh.fltk.run()
+    if '-nopopup' not in sys.argv:
+        gmsh.fltk.run()
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
