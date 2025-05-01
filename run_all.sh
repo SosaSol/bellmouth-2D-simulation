@@ -2,22 +2,54 @@
 set -euo pipefail # Exit on error, unset variable, or pipe failure
 trap 'echo "[ERROR] Script interrupted"; exit 1' SIGINT # Handle Ctrl+C
 
-# Usage:
-#   ./run_all.sh [serial|parallel] [number of cores]
-# Default is serial.
+# ---------------------- Usage ----------------------
+# ./run_all.sh [--serial|--parallel N] [--overwrite]
 
-# ---------------------- Parse Run Mode ----------------------
-RUN_MODE=${1:-serial}       # Default to serial if no argument is passed
-NP=${2:-12}                 # Default to 12 processors if none provided
+# ---------------------- Default Parameters ----------------------
+RUN_MODE="serial"
+NP=12
+OVERWRITE=false
 
-if [[ "$RUN_MODE" != "serial" && "$RUN_MODE" != "parallel" ]]; then
-    echo "Invalid run mode: $RUN_MODE"
-    echo "Usage: $0 [serial|parallel] [nCores]"
-    exit 1
-fi
+# ---------------------- Parse Named Arguments ----------------------
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --parallel)
+            RUN_MODE="parallel"
+            if [[ -n "${2:-}" && "$2" =~ ^[0-9]+$ ]]; then
+                NP="$2"
+                shift 2
+            else
+                echo "[ERROR] --parallel requires a numeric argument (e.g., --parallel 8)"
+                exit 1
+            fi
+            ;;
+        --serial)
+            RUN_MODE="serial"
+            shift
+            ;;
+        --overwrite)
+            OVERWRITE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--serial|--parallel N] [--overwrite]"
+            echo "    --serial               Run in serial mode (default)"
+            echo "    --parallel N           Run in parallel using N processors"
+            echo "    --overwrite            Overwrite existing case folders"
+            exit 0
+            ;;
+        *)
+            echo "[ERROR] Unknown option: $1"
+            echo "Use --help for usage."
+            exit 1
+            ;;
+    esac
+done
 
+# ---------------------- Summary & Validation ----------------------
 echo "[INFO] Run mode: $RUN_MODE"
 [[ "$RUN_MODE" == "parallel" ]] && echo "[INFO] Number of processors: $NP"
+echo "[INFO] Overwrite existing cases: $OVERWRITE"
 
 # Validate core count if running in parallel
 if [[ "$RUN_MODE" == "parallel" && "$NP" -le 1 ]]; then
@@ -41,6 +73,7 @@ CASE_TEMPLATE="${SCRIPT_DIR}/ELL-case-template"
 OUTPUT_DIR="${SCRIPT_DIR}/outputs"
 LOG_DIR="${SCRIPT_DIR}/logs"
 
+# ---------------------- Beginning of Script ----------------------
 # Create directories if they don't exist
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
 
@@ -56,9 +89,8 @@ echo "##################################################"
 echo
 
 # ---------------------- Main Loop ----------------------
-# Loop over Mw and Mb
-for Mw in $(seq $MW_START $MW_END); do
-    for Mb in $(seq $MB_START $MB_END); do
+for Mw in $(seq "$MW_START" "$MW_END"); do
+    for Mb in $(seq "$MB_START" "$MB_END"); do
         fname=$(printf "ELL-%d-%d-%.0f-%.0f-%.0f-%.0f-%.0f" \
             "$Mw" "$Mb" \
             "$(awk "BEGIN{printf \"%.0f\", $Kx * 100}")" \
@@ -69,25 +101,35 @@ for Mw in $(seq $MW_START $MW_END); do
 
         case_path="${OUTPUT_DIR}/${fname}"
         log_file="${LOG_DIR}/${fname}.log"
+
+        # ---- Check if we need to skip BEFORE logging block ----
+        if [ -d "$case_path" ] && [ "$OVERWRITE" != "true" ]; then
+            echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$log_file"
+            ((COUNTER++))
+            continue
+        fi
+
         {
             echo "=================================================="
             echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $fname"
             echo "=================================================="
-        
-            # 1) Copy template if it doesn't exist
-            if [ ! -d "$case_path" ]; then
-                echo "[INFO] Copying template case"
-                cp -r "${CASE_TEMPLATE}" "$case_path"
-                chmod +x "${case_path}/Allrun"
+
+            # 1) Prepare case directory
+            if [ -d "$case_path" ]; then
+                echo "[INFO] Overwriting existing case"
+                rm -rf "$case_path"
             else
-                echo "[SKIP] Case folder exists: $case_path"
+                echo "[INFO] Creating new case from template"
             fi
 
-            # 2) Generate mesh if it doesn't exists
+            cp -r "${CASE_TEMPLATE}" "$case_path"
+            chmod +x "${case_path}/Allrun"
+
+            # 2) Generate mesh if it doesn't exist
             msh_file="${case_path}/constant/triSurface/${fname}.msh"
-            if [ -f "$msh_file" ]; then # mesh exists
+            if [ -f "$msh_file" ]; then
                 echo "[SKIP] Mesh already exists for $fname"
-            else # mesh doesn't exist
+            else
                 save_dir="${case_path}/constant/triSurface"
                 echo "[INFO] Generating mesh..."
                 python3 mesh.py \
@@ -97,25 +139,27 @@ for Mw in $(seq $MW_START $MW_END); do
                     --xmin $xmin --ymin $ymin \
                     --xmax $xmax --ymax $ymax \
                     --nt $nt \
-                    --sd $save_dir
+                    --sd "$save_dir"
             fi
 
-            # 3) Run Allrun
+            # 3) Run simulation
             echo "[INFO] Running OpenFOAM simulation..."
             pushd "$case_path" > /dev/null
             if [[ "$RUN_MODE" == "parallel" ]]; then
-            ./Allrun parallel "$NP"
+                ./Allrun parallel "$NP"
             else
-            ./Allrun
+                ./Allrun
             fi
             popd > /dev/null
 
             echo "[DONE] Case finished: $fname"
             echo
         } 2>&1 | tee "$log_file"
+
         ((COUNTER++))
     done
 done
+# ---------------------- End Main Loop ----------------------
 
 # ---------------------- End Timing ----------------------
 ELAPSED_TIME=$SECONDS
@@ -126,8 +170,8 @@ SECONDS=$((ELAPSED_TIME % 60))
 echo
 echo "##################################################"
 echo "# All ${TOTAL_ITER} cases finished: $(date)"
-echo "# Total cases run: "
-echo "# Time finished: "
-echo "# Total runtime: ${HOURS}h ${MINUTES}m ${SECONDS_REMAINING}s"
+echo "# Total cases run: $((COUNTER - 1))"
+echo "# Time finished: $(date)"
+echo "# Total runtime: ${HOURS}h ${MINUTES}m ${SECONDS}s"
 echo "##################################################"
 
