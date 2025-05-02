@@ -1,56 +1,57 @@
 #!/usr/bin/env python3
 """
-Post-process OpenFOAM outputs: extract head losses, mass flow rates, and max yPlus
-from each case under ./outputs/<caseName>/postProcessing, then assemble and
-write CSV tables under ./postProcessingOutputs.
+Post-process OpenFOAM outputs:
+- Extract head losses, mass flow rates, and max yPlus from each simulation case.
+- Assemble results into CSV tables.
+- Optionally plot iteration data.
+
+Directory structure:
+  ./outputs/<caseName>/postProcessing
+Outputs written to:
+  ./postProcessingOutputs/
 """
 
 import sys
+import argparse
+import re
 from pathlib import Path
-import glob
+from typing import Optional, Tuple, List, Dict
 
-import numpy as np
-import pandas as pd
-
-# ─── Configuration ─────────────────────────────────────────────────────────────
+# ────────────────────────────────
+# Configuration Constants
+# ────────────────────────────────
 OUTPUTS_DIR = Path("outputs")
 POSTPROC_DIR = Path("postProcessingOutputs")
-POSTPROC_DIR.mkdir(exist_ok=True)
 
-# ─── I/O HELPERS ───────────────────────────────────────────────────────────────
+# ────────────────────────────────
+# Argument Parsing
+# ────────────────────────────────
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Extract OpenFOAM post-processing data.")
+    parser.add_argument("--write", action="store_true", help="Write results to CSV")
+    parser.add_argument("--plot", action="store_true", help="Plot results")
+    return parser.parse_args()
+
+# ────────────────────────────────
+# File Utilities
+# ────────────────────────────────
 
 def read_last_line(path: Path) -> str:
     """
-    Return the last non-empty, non-comment line from `path`.
+    Read the last non-empty, non-comment line of a file.
+    Optimized to avoid reading entire file unnecessarily.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"{path} not found")
-    # scan backwards in file
-    with path.open() as f:
-        f.seek(0, 2)
-        pos = f.tell()
-        buffer = ""
-        while pos > 0:
-            pos -= 1
-            f.seek(pos)
-            char = f.read(1)
-            if char == "\n":
-                line = buffer[::-1].strip()
-                if line and not line.startswith("#"):
-                    return line
-                buffer = ""
-            else:
-                buffer += char
-        # fallback: read all lines
-        f.seek(0)
-        valid = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
-        if valid:
-            return valid[-1]
-    raise ValueError(f"No data in {path}")
+    with path.open("r") as f:
+        for line in reversed(f.readlines()):
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                return stripped
+    raise ValueError(f"No valid data in {path}")
 
-def read_value(path: Path, index: int = -1) -> float:
+def read_value_from_last_line(path: Path, index: int = -1) -> float:
     """
-    Read a float from the last valid line of `path`, taking token at `index`.
+    Extract a specific token (by index) from the last valid line of a file.
     """
     line = read_last_line(path)
     tokens = line.split()
@@ -58,124 +59,238 @@ def read_value(path: Path, index: int = -1) -> float:
         raise ValueError(f"Not enough tokens in {path}: {tokens}")
     return float(tokens[index])
 
-# ─── EXTRACTION ────────────────────────────────────────────────────────────────
-
-def extract_case_data(case_dir: Path):
+def read_values(file_path: Path, iter_col: int = 0, value_col: int = -1) -> Tuple[List[float], List[float]]:
     """
-    From one case directory, extract:
-      - iteration (first token of solverInfo.dat)
-      - head loss (p_inlet - p_outlet)
-      - mass flow (last token of massFlowRateOutlet1)
-      - max yPlus (second-last token of yPlus.dat)
-    Returns (iteration, head_loss, massflow, max_yplus) or None on error.
+    Read columns of iteration and value data from a file.
+    Returns (iterations, values).
     """
+    if not file_path.exists():
+        raise FileNotFoundError(f"{file_path} not found")
 
+    with file_path.open() as f:
+        lines = f.readlines()
+
+    valid_lines = [line.strip() for line in lines if line.strip() and not line.startswith("#")]
+    data = [line.split() for line in valid_lines]
+
+    iterations, values = [], []
+    for line in data:
+        try:
+            iterations.append(float(line[iter_col]))
+            values.append(float(line[value_col]))
+        except (IndexError, ValueError):
+            raise ValueError(f"Malformed line in {file_path}: {line}")
+
+    return iterations, values
+
+def safe_glob(base: Path, pattern: str) -> Path:
+    """
+    Find the first file that matches a pattern, or raise.
+    """
     try:
-        base = case_dir / "postProcessing"
-        # find each file
-        solver = next(base.glob("solverInfo1/0/solverInfo.dat"))
-        p_in   = next(base.glob("averageTotalPressureInlet1/0/surfaceFieldValue.dat"))
-        p_out  = next(base.glob("averageTotalPressureOutlet1/0/surfaceFieldValue.dat"))
-        mflow  = next(base.glob("massFlowRateOutlet1/0/surfaceFieldValue.dat"))
-        yplus  = next(base.glob("yPlus1/0/yPlus.dat"))
-        # read data
-        it      = read_value(solver, 0)
-        pin     = read_value(p_in,   -1)
-        pout    = read_value(p_out,  -1)
-        mrate   = read_value(mflow,  -1)
-        y_plus  = read_value(yplus,  -2)
-        return it, (pin - pout), mrate, y_plus
+        return next(base.glob(pattern))
+    except StopIteration:
+        raise FileNotFoundError(f"No file matching {pattern} in {base}")
 
+def get_required_files(case_dir: Path) -> Dict[str, Path]:
+    """
+    Collect paths to required post-processing output files.
+    """
+    base = case_dir / "postProcessing"
+    return {
+        'solver': safe_glob(base, "solverInfo1/0/solverInfo.dat"),
+        'p_in': safe_glob(base, "averageTotalPressureInlet1/0/surfaceFieldValue.dat"),
+        'p_out': safe_glob(base, "averageTotalPressureOutlet1/0/surfaceFieldValue.dat"),
+        'm_flow': safe_glob(base, "massFlowRateOutlet1/0/surfaceFieldValue.dat"),
+        'y_plus': safe_glob(base, "yPlus1/0/yPlus.dat"),
+    }
+
+# ────────────────────────────────
+# Data Extraction
+# ────────────────────────────────
+
+def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float, float]]:
+    """
+    Extract key metrics from one simulation case:
+    - iteration count
+    - pressure outlet
+    - head loss (p_in - p_out)
+    - mass flow rate
+    - max yPlus
+    """
+    try:
+        files = get_required_files(case_dir)
+        it      = read_value_from_last_line(files['solver'], 0)
+        pin     = read_value_from_last_line(files['p_in'], -1)
+        pout    = read_value_from_last_line(files['p_out'], -1)
+        mrate   = read_value_from_last_line(files['m_flow'], -1)
+        y_plus  = read_value_from_last_line(files['y_plus'], -2)
+        return int(it), pout, (pin - pout), mrate, y_plus
     except Exception as e:
+        print(f"[ERROR] Failed to extract data from {case_dir.name}")
         import traceback
-        print(f"[ERROR] Failed to process {case_dir.name}")
         traceback.print_exc()
         return None
 
+# ────────────────────────────────
+# Plotting
+# ────────────────────────────────
 
-# ─── MAIN WORKFLOW ────────────────────────────────────────────────────────────
+def plot_data(case_dir: Path, name: str) -> None:
+    import matplotlib.pyplot as plt
 
-def main():
-    if not OUTPUTS_DIR.is_dir():
-        print(f"[ERROR] Outputs folder not found: {OUTPUTS_DIR}")
+    try:
+        base = case_dir / "postProcessing"
+        pout  = read_values(safe_glob(base, "averageTotalPressureOutlet1/0/surfaceFieldValue.dat"))
+        mflow = read_values(safe_glob(base, "massFlowRateOutlet1/0/surfaceFieldValue.dat"))
+        yplus = read_values(safe_glob(base, "yPlus1/0/yPlus.dat"), value_col=-2)
+    except Exception:
+        print(f"[ERROR] Failed to read plot data for {name}")
+        return
+
+    if any(len(x[0]) <= 1 for x in [pout, mflow, yplus]):
+        print(f"[WARN] Not enough data to plot for {name}")
+        return
+
+    plt.figure(figsize=(10, 6))
+
+    plt.subplot(3, 1, 1)
+    plt.plot(*pout, label="Pressure Outlet", color="blue", linestyle='--', marker='o')
+    plt.title(f"{name} - Pressure Outlet")
+    plt.xlabel("Iterations")
+    plt.ylabel("Pressure (Pa)")
+    plt.grid(True)
+
+    plt.subplot(3, 1, 2)
+    plt.plot(*mflow, label="Mass Flow", color="green", linestyle='--', marker='o')
+    plt.title(f"{name} - Mass Flow Rate")
+    plt.xlabel("Iterations")
+    plt.ylabel("kg/s")
+    plt.grid(True)
+
+    plt.subplot(3, 1, 3)
+    plt.plot(*yplus, label="yPlus", color="red", linestyle='--', marker='o')
+    plt.title(f"{name} - Max yPlus")
+    plt.xlabel("Iterations")
+    plt.ylabel("yPlus")
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+# ────────────────────────────────
+# Utility: Natural Sorting
+# ────────────────────────────────
+
+def natural_key(path: Path) -> List:
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', path.name)]
+
+# ────────────────────────────────
+# Geometry Parsing
+# ────────────────────────────────
+
+def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[Tuple[int, int]]]:
+    """
+    Identify case geometry and parameters from directory name.
+    Returns (geometry, key, (Mb, Mw)) or (None, None, None) if unknown.
+    """
+    parts = name.split("-")
+    try:
+        if name.startswith("ELL-"):
+            _, Mw, Mb, Kx, Ky, r, L, t = parts
+            return "ELL", f"{Kx}_{Ky}_{r}_{L}", (int(Mb), int(Mw))
+        elif name.startswith("IN-"):
+            _, Mw, L, t = parts
+            return "IN", L, (1, int(Mw))
+        elif name.startswith("RAD-"):
+            _, Mw, Mb, K, L, t = parts
+            return "RAD", f"{K}_{L}", (int(Mb), int(Mw))
+    except ValueError:
+        pass
+    return None, None, None
+
+# ────────────────────────────────
+# Main Workflow
+# ────────────────────────────────
+
+def main(write: bool = False, plot: bool = False) -> None:
+    if not OUTPUTS_DIR.exists():
+        print(f"[ERROR] Outputs directory not found: {OUTPUTS_DIR}")
         sys.exit(1)
 
-    # gather all case subdirectories
-    cases = [p for p in OUTPUTS_DIR.iterdir() if p.is_dir()]
-    print(f"Found {len(cases)} cases in {OUTPUTS_DIR}")
+    cases = sorted([p for p in OUTPUTS_DIR.iterdir() if p.is_dir()], key=natural_key)
+    print(f"Found {len(cases)} cases.")
 
-    # data structure: { (geom, params_key): { (Mb, Mw): (head, mflow, yplus) } }
-    results = {}
+    results: Dict[Tuple[str, str], Dict[Tuple[int, int], Dict[str, float]]] = {}
 
-    for case in sorted(cases):
+    for case in cases:
         name = case.name
-        print(f"\nProcessing case: {name}")
-        # determine geometry type & parameters key
-        if name.startswith("ELL-"):
-            _, Mw, Mb, Kx, Ky, r, L, t = name.split("-")
-            geom, key, dims = "ELL", f"{Kx}_{Ky}_{r}_{L}", (int(Mb), int(Mw))
-        elif name.startswith("IN-"):
-            _, Mw, L, t = name.split("-")
-            geom, key, dims = "IN", L, (1, int(Mw))
-        elif name.startswith("RAD-"):
-            _, Mw, Mb, K, L, t = name.split("-")
-            geom, key, dims = "RAD", f"{K}_{L}", (int(Mb), int(Mw))
-        else:
-            print(f"[WARN] Unknown pattern: {name}, skipping")
+        print(f"\nProcessing: {name}")
+
+        geom, key, dims = parse_case_name(name)
+        if not geom:
+            print(f"[WARN] Skipping unknown format: {name}")
             continue
-        
+
         data = extract_case_data(case)
         if data is None:
             continue
 
-        
-        n_iter, head_loss, massflow, max_yplus = data
+        n_iter, pt_out, head_loss, massflow, max_yplus = data
 
-        # Reporting
-        print(f"  - Iterations              : {int(n_iter)}")
-        print(f"  - Mass flow rate (kg/s)   : {massflow:.4f}")
-        print(f"  - Head loss (Pa)          : {head_loss:.2f}")
-        print(f"  - Max yPlus               : {max_yplus:.2f}")
-        if max_yplus > 5.0:
-            print("  WARNING: yPlus > 5 detected!")
-        elif max_yplus >= 1.0:
-            print("  WARNING: yPlus not fully below 1!")
-        
+        print(f"  - Iterations:      {n_iter}")
+        print(f"  - Pressure Out:    {pt_out:.4f} Pa")
+        print(f"  - Head Loss:       {head_loss:.4f} Pa")
+        print(f"  - Mass Flow Rate:  {massflow:.4f} kg/s")
+        print(f"  - Max yPlus:       {max_yplus:.2f}")
+        if max_yplus > 5:
+            print("  WARNING: yPlus > 5!")
+        elif max_yplus >= 1:
+            print("  WARNING: yPlus between 1 and 5.")
+
         results.setdefault((geom, key), {})[dims] = {
             "head_loss": head_loss,
             "massflow":  massflow,
-            "max_yplus": max_yplus
+            "max_yplus": max_yplus,
         }
 
+        if plot:
+            plot_data(case, name)
 
-    # for each geometry+params, build and save DataFrames
-    for (geom, key), table in results.items():
-        # build index/columns
-        Mb_vals = sorted({mb for mb, _ in table})
-        Mw_vals = sorted({mw for _, mw in table})
+    if not write:
+        print("\nDone. Use --write to export CSV files.")
+        return
+
+    POSTPROC_DIR.mkdir(exist_ok=True)
+    import pandas as pd
+
+    for (geom, key), data in results.items():
+        Mb_vals = sorted(set(mb for mb, _ in data))
+        Mw_vals = sorted(set(mw for _, mw in data))
         idx = pd.Index(Mb_vals, name="Mb")
         cols = pd.Index(Mw_vals, name="Mw")
 
-        # initialize empty DataFrames
-        df_head  = pd.DataFrame(index=idx, columns=cols, dtype=float)
-        df_mflow = df_head.copy()
+        df_head = pd.DataFrame(index=idx, columns=cols, dtype=float)
+        df_flow = df_head.copy()
         df_yplus = df_head.copy()
 
-        # fill
-        for (mb, mw), vals in table.items():
-            df_head.at[mb, mw]  = vals["head_loss"]
-            df_mflow.at[mb, mw] = vals["massflow"]
+        for (mb, mw), vals in data.items():
+            df_head.at[mb, mw] = vals["head_loss"]
+            df_flow.at[mb, mw] = vals["massflow"]
             df_yplus.at[mb, mw] = vals["max_yplus"]
 
-        # output CSVs
         base = f"{geom}_{key}"
         df_head.to_csv(POSTPROC_DIR / f"{base}_head_losses.csv")
-        df_mflow.to_csv(POSTPROC_DIR / f"{base}_massflow.csv")
+        df_flow.to_csv(POSTPROC_DIR / f"{base}_massflow.csv")
         df_yplus.to_csv(POSTPROC_DIR / f"{base}_max_yplus.csv")
+        print(f"[OK] Saved CSVs for {geom}/{key}")
 
-        print(f"[OK] Wrote {geom}/{key} tables to {POSTPROC_DIR}")
+    print("\nAll processing complete.")
 
-    print("\nAll post-processing complete.")
+# ────────────────────────────────
+# Script Entry Point
+# ────────────────────────────────
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(write=args.write, plot=args.plot)
