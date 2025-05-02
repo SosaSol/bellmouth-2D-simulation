@@ -29,7 +29,7 @@ def parse_args():
     
     parser.add_argument("--Mw", type=int, default=12, help="Number of wires")
 
-    parser.add_argument("--t", type=float, default=5e-3, help="Wall thickness (in meters)")
+    parser.add_argument("--t", type=float, default=21e-3, help="Wall thickness (in meters)")
 
     parser.add_argument("--L", type=float, default=0.339, help="Length of straight section (in meters)")
 
@@ -374,8 +374,8 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
     logging.info("Extruding and defining physical groups...")
     extrude_and_group(surface=surf)
 
-    if '-nopopup' not in sys.argv:
-        gmsh.fltk.run()
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
