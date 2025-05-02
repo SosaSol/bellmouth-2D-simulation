@@ -44,9 +44,9 @@ gmshToFoam "$msh_file" | tee log.gmshToFoam
 # ------------------------------------------------------------------------------
 # 3. Boundary Condition Update
 # ------------------------------------------------------------------------------
-if [[ -f "../../updateBoundaryConditions.py" ]]; then
+if [[ -f "../../../updateBoundaryConditions.py" ]]; then
     echo "[INFO] Updating boundary conditions"
-    python3 ../../updateBoundaryConditions.py
+    python3 ../../../updateBoundaryConditions.py
 else
     echo "[WARNING] Boundary condition script not found: ../../updateBoundaryConditions.py"
 fi
