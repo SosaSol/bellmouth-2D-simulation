@@ -167,6 +167,11 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     # truncate expansion ration to two decimal places
     expansion_ratio = math.trunc(expansion_ratio*100)/100
 
+    # Calculate turbulence frequency omega
+    beta1 = 0.075
+    omega = 6 * nu / (beta1 * (y1/2)**2)
+    logging.info(f"turbulent frequency omega at wall: {omega:.2e} 1/s")
+
     return  y1, delta99, expansion_ratio
 
 def apply_boundary_layer(curve_tags:list, edge_points:tuple[float, float], x:float, n_layers:int=20, y_plus:float=0.95,  U_inf:float=16) -> None:
@@ -224,7 +229,7 @@ def refine_mesh(curve_tags:list, xmax:float, ymin:float, Di:float, a:float, b:fl
     gmsh.model.mesh.field.setNumber(thr, "DistMax", 5)
 
     # Box refinement near inlet corner
-    XMin = xmax - L - a - 0.3
+    XMin = xmax - L - a - 0.15
     YMax = ymin + Di/2 + b + 0.1
     logging.info(f"Box refinement near inlet corner: {XMin:.2f} < x < {xmax:.2f}, {ymin:.2f} < y < {YMax:.2f}")
     box = gmsh.model.mesh.field.add("Box")
@@ -236,9 +241,24 @@ def refine_mesh(curve_tags:list, xmax:float, ymin:float, Di:float, a:float, b:fl
     gmsh.model.mesh.field.setNumber(box, "YMax", YMax)
     gmsh.model.mesh.field.setNumber(box, "ZMin", -2)
     gmsh.model.mesh.field.setNumber(box, "ZMax",  2)
-    gmsh.model.mesh.field.setNumber(box, "Thickness", 10)
+    gmsh.model.mesh.field.setNumber(box, "Thickness", 5)
 
-    fields = [thr, box]
+    # Box refinement near inlet corner
+    XMin = xmax - 0.01
+    YMax = ymin + Di/2
+    logging.info(f"Box refinement near inlets: {XMin:.2f} < x < {xmax:.2f}, {ymin:.2f} < y < {YMax:.2f}")
+    box2 = gmsh.model.mesh.field.add("Box")
+    gmsh.model.mesh.field.setNumber(box2, "VIn", sizeBox/3)
+    gmsh.model.mesh.field.setNumber(box2, "VOut", 1)
+    gmsh.model.mesh.field.setNumber(box2, "XMin", XMin)
+    gmsh.model.mesh.field.setNumber(box2, "XMax", xmax)
+    gmsh.model.mesh.field.setNumber(box2, "YMin", ymin)
+    gmsh.model.mesh.field.setNumber(box2, "YMax", YMax)
+    gmsh.model.mesh.field.setNumber(box2, "ZMin",  -0.01)
+    gmsh.model.mesh.field.setNumber(box2, "ZMax",  1)
+    gmsh.model.mesh.field.setNumber(box2, "Thickness", 0.00)
+
+    fields = [thr, box, box2]
     
     # Combine fields
     mfield = gmsh.model.mesh.field.add("Min")
@@ -280,10 +300,12 @@ def extrude_and_group(surface:int):
 # Save Mesh
 # -----------------------------
 def save_mesh(fname:str , save_path: Path):
+    """
+    Save the generated mesh to a file.
+    """
     save_path.mkdir(parents=True, exist_ok=True)
     msh = save_path / f"{fname}.msh"
     gmsh.write(str(msh))
-    logging.info(f"mesh saved to {msh}")
 
 # -----------------------------
 # Print Information
@@ -356,8 +378,11 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
     surf, curves, edge_points = create_geometry(Mw, t, L, xmin, ymin, xmax, ymax)
     # Apply boundary layer
     apply_boundary_layer(curve_tags=curves[2:5], edge_points=edge_points, x=L, n_layers=19, y_plus=0.95, U_inf=16)
+    
     # Refine mesh
     Di = compute_geometry_parameters(Mw)
+    logging.info(f"Inlet width Di:        {Di:.3f} m")
+    logging.info(f"Inlet half width Di/2: {Di/2:.3f} m")
     logging.info("Refining mesh...")
     refine_mesh(curve_tags=curves[2:5],
                 xmax=xmax, ymin=ymin, Di=Di, a=0.0, b=0.0, L=L,
@@ -379,12 +404,18 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
+
+    # Save mesh
+    logging.info("Saving mesh...")
     save_mesh(fname, save_path=save_path)
 
     # if '-nopopup' not in sys.argv:
     #     gmsh.fltk.run()
 
+    logging.info("Mesh generation complete. Finalizing GMSH...")
     gmsh.finalize()
+
+    logging.info("Mesh finalized. Exiting...")
 
 # -----------------------------
 # Entry point for script execution
