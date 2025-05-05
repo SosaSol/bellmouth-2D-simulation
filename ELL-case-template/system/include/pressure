@@ -35,7 +35,7 @@ averageTotalPressureInlet1
 {
     // Mandatory entries (unmodifiable)
     type            surfaceFieldValue;
-    functionObjectLibs ("libfieldFunctionObjects.so");
+    libs ("libfieldFunctionObjects.so");
 
     // Mandatory entries (runtime modifiable)
     fields          ( total(p) );
@@ -56,7 +56,7 @@ averageTotalPressureOutlet1
 {
     // Mandatory entries (unmodifiable)
     type            surfaceFieldValue;
-    functionObjectLibs ("libfieldFunctionObjects.so");
+    libs ("libfieldFunctionObjects.so");
 
     // Mandatory entries (runtime modifiable)
     fields          ( total(p) );
