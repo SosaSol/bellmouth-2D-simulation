@@ -223,7 +223,7 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     u_tau = U_inf * math.sqrt(Cf / 2)       # Friction velocity
     yp = y_plus * nu / u_tau                # First cell height for desired y+
     y1 = 2*yp                               # Total height of the first cell 
-    y1 = y1 / 2                             # Ajust from simulation results
+    y1 = y1 / 4                             # Ajust from simulation results
 
     # Growth Ratio
     delta99 = 4.91*x/Re_x**0.5 if Re_x<5e5 else 0.38*x/Re_x**0.2 # Boundary layer thickness
@@ -491,7 +491,7 @@ def main(Mw:int=12,
 
     # Apply boundary layer
     logging.info("Applying boundary layers...")
-    wall_curve_tags = apply_multiple_boundary_layers(all_edge_points=edge_points, x=L, n_layers=19, y_plus=0.95, U_inf=16)
+    wall_curve_tags = apply_multiple_boundary_layers(all_edge_points=edge_points, x=L, n_layers=22, y_plus=0.95, U_inf=16)
     
     # Refine mesh
     Di = compute_geometry_parameters(Mw)
