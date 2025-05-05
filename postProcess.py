@@ -18,12 +18,6 @@ from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 
 # ────────────────────────────────
-# Configuration Constants
-# ────────────────────────────────
-OUTPUTS_DIR = Path("outputs")
-POSTPROC_DIR = Path("postProcessingOutputs")
-
-# ────────────────────────────────
 # Argument Parsing
 # ────────────────────────────────
 
@@ -214,78 +208,86 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
 # ────────────────────────────────
 
 def main(write: bool = False, plot: bool = False) -> None:
-    if not OUTPUTS_DIR.exists():
-        print(f"[ERROR] Outputs directory not found: {OUTPUTS_DIR}")
+    base_outputs = Path("outputs")
+    if not base_outputs.exists():
+        print(f"[ERROR] Base outputs directory not found: {base_outputs}")
         sys.exit(1)
 
-    cases = sorted([p for p in OUTPUTS_DIR.iterdir() if p.is_dir()], key=natural_key)
-    print(f"Found {len(cases)} cases.")
+    all_subdirs = [d for d in base_outputs.iterdir() if d.is_dir()]
+    if not all_subdirs:
+        print("[ERROR] No subdirectories found in outputs/.")
+        sys.exit(1)
 
-    results: Dict[Tuple[str, str], Dict[Tuple[int, int], Dict[str, float]]] = {}
+    for subdir in all_subdirs:
+        output_dir = subdir
+        postproc_dir = Path("postProcessingOutputs") / subdir.name
+        postproc_dir.mkdir(parents=True, exist_ok=True)
 
-    for case in cases:
-        name = case.name
-        print(f"\nProcessing: {name}")
+        cases = sorted([p for p in output_dir.iterdir() if p.is_dir()], key=natural_key)
+        print(f"\n>>> Processing '{subdir.name}' with {len(cases)} cases")
 
-        geom, key, dims = parse_case_name(name)
-        if not geom:
-            print(f"[WARN] Skipping unknown format: {name}")
-            continue
+        results: Dict[Tuple[str, str], Dict[Tuple[int, int], Dict[str, float]]] = {}
 
-        data = extract_case_data(case)
-        if data is None:
-            continue
+        for case in cases:
+            name = case.name
+            print(f"\nProcessing: {name}")
 
-        n_iter, pt_out, head_loss, massflow, max_yplus = data
+            geom, key, dims = parse_case_name(name)
+            if not geom:
+                print(f"[WARN] Skipping unknown format: {name}")
+                continue
 
-        print(f"  - Iterations:      {n_iter}")
-        print(f"  - Pressure Out:    {pt_out:.4f} Pa")
-        print(f"  - Head Loss:       {head_loss:.4f} Pa")
-        print(f"  - Mass Flow Rate:  {massflow:.4f} kg/s")
-        print(f"  - Max yPlus:       {max_yplus:.2f}")
-        if max_yplus > 5:
-            print("  WARNING: yPlus > 5!")
-        elif max_yplus >= 1:
-            print("  WARNING: yPlus between 1 and 5.")
+            data = extract_case_data(case)
+            if data is None:
+                continue
 
-        results.setdefault((geom, key), {})[dims] = {
-            "head_loss": head_loss,
-            "massflow":  massflow,
-            "max_yplus": max_yplus,
-        }
+            n_iter, pt_out, head_loss, massflow, max_yplus = data
 
-        if plot:
-            plot_data(case, name)
+            print(f"  - Iterations:      {n_iter}")
+            print(f"  - Pressure Out:    {pt_out:.4f} Pa")
+            print(f"  - Head Loss:       {head_loss:.4f} Pa")
+            print(f"  - Mass Flow Rate:  {massflow:.4f} kg/s")
+            print(f"  - Max yPlus:       {max_yplus:.2f}")
+            if max_yplus > 5:
+                print("  WARNING: yPlus > 5!")
+            elif max_yplus >= 1:
+                print("  WARNING: yPlus between 1 and 5.")
 
-    if not write:
-        print("\nDone. Use --write to export CSV files.")
-        return
+            results.setdefault((geom, key), {})[dims] = {
+                "head_loss": head_loss,
+                "massflow":  massflow,
+                "max_yplus": max_yplus,
+            }
 
-    POSTPROC_DIR.mkdir(exist_ok=True)
-    import pandas as pd
+            if plot:
+                plot_data(case, name)
 
-    for (geom, key), data in results.items():
-        Mb_vals = sorted(set(mb for mb, _ in data))
-        Mw_vals = sorted(set(mw for _, mw in data))
-        idx = pd.Index(Mb_vals, name="Mb")
-        cols = pd.Index(Mw_vals, name="Mw")
+        if write:
+            import pandas as pd
 
-        df_head = pd.DataFrame(index=idx, columns=cols, dtype=float)
-        df_flow = df_head.copy()
-        df_yplus = df_head.copy()
+            for (geom, key), data in results.items():
+                Mb_vals = sorted(set(mb for mb, _ in data))
+                Mw_vals = sorted(set(mw for _, mw in data))
+                idx = pd.Index(Mb_vals, name="Mb")
+                cols = pd.Index(Mw_vals, name="Mw")
 
-        for (mb, mw), vals in data.items():
-            df_head.at[mb, mw] = vals["head_loss"]
-            df_flow.at[mb, mw] = vals["massflow"]
-            df_yplus.at[mb, mw] = vals["max_yplus"]
+                df_head = pd.DataFrame(index=idx, columns=cols, dtype=float)
+                df_flow = df_head.copy()
+                df_yplus = df_head.copy()
 
-        base = f"{geom}_{key}"
-        df_head.to_csv(POSTPROC_DIR / f"{base}_head_losses.csv")
-        df_flow.to_csv(POSTPROC_DIR / f"{base}_massflow.csv")
-        df_yplus.to_csv(POSTPROC_DIR / f"{base}_max_yplus.csv")
-        print(f"[OK] Saved CSVs for {geom}/{key}")
+                for (mb, mw), vals in data.items():
+                    df_head.at[mb, mw] = vals["head_loss"]
+                    df_flow.at[mb, mw] = vals["massflow"]
+                    df_yplus.at[mb, mw] = vals["max_yplus"]
+
+                base = f"{geom}_{key}"
+                df_head.to_csv(postproc_dir / f"{base}_head_losses.csv")
+                df_flow.to_csv(postproc_dir / f"{base}_massflow.csv")
+                df_yplus.to_csv(postproc_dir / f"{base}_max_yplus.csv")
+                print(f"[OK] Saved CSVs for {geom}/{key} in {postproc_dir}")
 
     print("\nAll processing complete.")
+
 
 # ────────────────────────────────
 # Script Entry Point
