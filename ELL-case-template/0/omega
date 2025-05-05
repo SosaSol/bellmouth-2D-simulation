@@ -34,7 +34,8 @@ boundaryField
 
     wall
     {
-        type            zeroGradient;
+        type            omegaWallFunction ;
+        value           uniform 50; // is this used or placeholder?
     }
 
 
