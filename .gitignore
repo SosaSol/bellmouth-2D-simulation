@@ -3,6 +3,9 @@ logs/
 outputs/
 postProcessingOutputs/
 
+# Ignore files for multiple and reverse simulation run
+run_all_*/*
+
 # macOS
 .DS_Store
 
