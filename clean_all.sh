@@ -27,4 +27,19 @@ else
     echo "[INFO] Logs directory not found."
 fi
 
+# Confirm before deletion
+read -p "Are you sure you want to delete the post processing outputs and logs? (y/n): " confirm
+if [[ "$confirm" != "y" ]]; then
+    echo "Aborting clean-up."
+    exit 1
+fi
+
+# delete output folder if it exists
+if [ -d "./postProcessingOutputs" ]; then
+    rm -rf ./postProcessingOutputs
+    echo "[INFO] postProcessingOutputs directory deleted."
+else
+    echo "[INFO] postProcessingOutputs directory not found."
+fi
+
 # End of script
