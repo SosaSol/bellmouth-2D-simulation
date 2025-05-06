@@ -24,7 +24,7 @@ H2 = 238.94e-3  # m
 
 ANGLE = 180 - 171.79  # degrees
 GAP2 = 42.56e-3  # m
-DELTA_H = L2 * math.sin(ANGLE * math.pi/180)  # m
+DELTA_H = L2 * math.tan(ANGLE * math.pi/180)  # m
 
 t = GAP2/2
 
@@ -182,7 +182,7 @@ def create_geometry(
     elif Mw % 2 == 0:
         N = Mw // 2 + 1
         for i in range(N):
-            y1 = H1 * i + GAP2 * i/2
+            y1 = H1 * i + GAP2 * (i-1/2)
             y2 = y1 + DELTA_H
             y4 = y1 + GAP2
             y3 = y4 - DELTA_H
