@@ -66,8 +66,8 @@ def compute_geometry_parameters(
     Db = Mb * MODULE_WIDTH + (Mb - 1) * GAP  # bellmouth reference width in meters
 
     # Ensure a >= b for ellipse definition
-    a_raw = Db / 2
-    b_raw = Ky * Db / 2
+    a_raw = Db      # a = 3*Kx*Db
+    b_raw = Ky * Db # b = Ky*Db
     a = max(a_raw, b_raw)
     b = min(a_raw, b_raw)
     return Di, Db, a, b
