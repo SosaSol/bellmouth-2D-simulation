@@ -75,6 +75,92 @@ nt=$NP
 MW_START=2; MW_END=12
 MB_START=2; MB_END=12
 
+# ---------------------- Functions ----------------------
+
+# Function to run a single simulation case
+# Arguments:
+#   $1 - Case type (e.g., "IN", "ELL")
+#   $2 - Case name
+#   $3 - Path to the case directory
+#   $4 - Log file path
+#   $5 - Mesh generation script to use
+#   $6 - Mesh generation arguments
+run_case() {
+    local case_type="$1"  # "IN" or "ELL"
+    local case_name="$2"
+    local case_path="$3"
+    local log_file="$4"
+    local mesh_script="$5"
+    local mesh_args="$6"
+
+    {
+        echo "=================================================="
+        echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $case_name"
+        echo "[INFO] Start: $(date)"
+        echo "=================================================="
+
+        if [ -d "$case_path" ]; then
+            echo "[INFO] Overwriting existing case"
+            rm -rf "$case_path"
+        else
+            echo "[INFO] Creating new case from template"
+        fi
+        cp -r "$CASE_TEMPLATE" "$case_path"
+        chmod +x "${case_path}/Allrun"
+
+        generate_mesh "$case_path" "$case_name" "$mesh_script" "$mesh_args"
+        run_simulation "$case_path"
+
+        echo "[DONE] Case finished: $case_name"
+        echo "[INFO] End: $(date)"
+        echo
+    } 2>&1 | tee "$log_file"
+}
+
+# Function to generate a single mesh
+# Arguments:
+#   $1 - Path to the case directory
+#   $2 - Case name
+#   $3 - Mesh generation script to use
+#   $4 - Mesh generation arguments
+generate_mesh() {
+    local case_path="$1"
+    local case_name="$2"
+    local mesh_script="$3"
+    local mesh_args="$4"
+
+    local msh_file="${case_path}/constant/triSurface/${case_name}.msh"
+    if [ -f "$msh_file" ]; then
+        echo "[SKIP] Mesh already exists for $case_name"
+    else
+        local save_dir="${case_path}/constant/triSurface"
+        echo "[INFO] Generating mesh using $mesh_script..."
+        python3 "$SCRIPT_DIR/$mesh_script" $mesh_args --sd "$save_dir"
+    fi
+}
+
+# Function to run a single simulation
+# Arguments:
+#   $1 - Path to the case directory
+run_simulation() {
+    local case_path="$1"
+    echo "[INFO] Running OpenFOAM simulation..."
+
+    # Check if the Allrun script exists and is executable
+    if [ ! -x "${case_path}/Allrun" ]; then
+        echo "[ERROR] Allrun script is missing or not executable in $case_path"
+        exit 1
+    fi
+
+    pushd "$case_path" > /dev/null
+    if [[ "$RUN_MODE" == "parallel" ]]; then
+        ./Allrun parallel "$NP"
+    else
+        ./Allrun
+    fi
+    popd > /dev/null
+}
+
 # ---------------------- Check Dependencies ----------------------
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
@@ -114,60 +200,22 @@ echo
 
 # ---------------------- Main Loop ----------------------
 for Mw in $(seq "$MW_START" "$MW_END"); do
-
-    fname=$(printf "IN-%d-%d-%d" \
+    # Straight case (IN-...)
+    straight_fname=$(printf "IN-%d-%d-%d" \
         "$Mw" \
         "$(awk "BEGIN{print int($L * 1000)}")" \
         "$(awk "BEGIN{print int($t * 1000)}")")
 
-    case_path="${OUTPUT_DIR}/${fname}"
-    log_file="${LOG_DIR}/${fname}.log"
+    straight_case_path="${OUTPUT_DIR}/${straight_fname}"
+    straight_log_file="${LOG_DIR}/${straight_fname}.log"
 
-    if [ -d "$case_path" ] && [ "$OVERWRITE" != "true" ]; then
-        echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$log_file"
+    if [ ! -d "$straight_case_path" ] || [ "$OVERWRITE" == "true" ]; then
+        run_case "IN" "$straight_fname" "$straight_case_path" "$straight_log_file" "$MESH_SCRIPT_STRAIGHT" "--Mw $Mw $MESH_FLAGS_STRAIGHT"
         ((COUNTER++))
-        continue
+    else
+        echo "[SKIP] Case folder: $straight_fname already exists and OVERWRITE is false" | tee "$straight_log_file"
+        ((COUNTER++))
     fi
-
-    {
-        echo "=================================================="
-        echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $fname"
-        echo "[INFO] Start: $(date)"
-        echo "=================================================="
-
-        if [ -d "$case_path" ]; then
-            echo "[INFO] Overwriting existing case"
-            rm -rf "$case_path"
-        else
-            echo "[INFO] Creating new case from template"
-        fi
-        cp -r "$CASE_TEMPLATE" "$case_path"
-        chmod +x "${case_path}/Allrun"
-
-        msh_file="${case_path}/constant/triSurface/${fname}.msh"
-        if [ -f "$msh_file" ]; then
-            echo "[SKIP] Mesh already exists for $fname"
-        else
-            save_dir="${case_path}/constant/triSurface"
-            echo "[INFO] Generating mesh using $MESH_SCRIPT..."
-            python3 "$SCRIPT_DIR/$MESH_SCRIPT_STRAIGHT" --Mw $Mw $MESH_FLAGS_STRAIGHT --sd "$save_dir"
-        fi
-
-        echo "[INFO] Running OpenFOAM simulation..."
-        pushd "$case_path" > /dev/null
-        if [[ "$RUN_MODE" == "parallel" ]]; then
-            ./Allrun parallel "$NP"
-        else
-            ./Allrun
-        fi
-        popd > /dev/null
-
-        echo "[DONE] Case finished: $fname"
-        echo "[INFO] End: $(date)"
-        echo
-    } 2>&1 | tee "$log_file"
-
-    ((COUNTER++))
 
     # Mb loop (ELL-...)
     for Mb in $(seq "$MB_START" "$MB_END"); do
@@ -183,51 +231,13 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
         case_path="${OUTPUT_DIR}/${fname}"
         log_file="${LOG_DIR}/${fname}.log"
 
-        if [ -d "$case_path" ] && [ "$OVERWRITE" != "true" ]; then
+        if [ ! -d "$case_path" ] || [ "$OVERWRITE" == "true" ]; then
+            run_case "ELL" "$fname" "$case_path" "$log_file" "$MESH_SCRIPT" "--Mw $Mw --Mb $Mb $MESH_FLAGS"
+            ((COUNTER++))
+        else
             echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$log_file"
             ((COUNTER++))
-            continue
         fi
-
-        {
-            echo "=================================================="
-            echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $fname"
-            echo "[INFO] Start: $(date)"
-            echo "=================================================="
-
-            if [ -d "$case_path" ]; then
-                echo "[INFO] Overwriting existing case"
-                rm -rf "$case_path"
-            else
-                echo "[INFO] Creating new case from template"
-            fi
-            cp -r "$CASE_TEMPLATE" "$case_path"
-            chmod +x "${case_path}/Allrun"
-
-            msh_file="${case_path}/constant/triSurface/${fname}.msh"
-            if [ -f "$msh_file" ]; then
-                echo "[SKIP] Mesh already exists for $fname"
-            else
-                save_dir="${case_path}/constant/triSurface"
-                echo "[INFO] Generating mesh using $MESH_SCRIPT..."
-                python3 "$SCRIPT_DIR/$MESH_SCRIPT" --Mw $Mw --Mb $Mb $MESH_FLAGS --sd "$save_dir"
-            fi
-
-            echo "[INFO] Running OpenFOAM simulation..."
-            pushd "$case_path" > /dev/null
-            if [[ "$RUN_MODE" == "parallel" ]]; then
-                ./Allrun parallel "$NP"
-            else
-                ./Allrun
-            fi
-            popd > /dev/null
-
-            echo "[DONE] Case finished: $fname"
-            echo "[INFO] End: $(date)"
-            echo
-        } 2>&1 | tee "$log_file"
-
-        ((COUNTER++))
     done
 done
 
