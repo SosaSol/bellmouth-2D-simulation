@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "[ERROR] Unknown option: $1"
-            echo "Use --help for usage."
+            echo "Use --help or -h for usage."
             exit 1
             ;;
     esac

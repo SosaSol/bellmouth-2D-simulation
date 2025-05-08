@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "[ERROR] Unknown option: $1"
-            echo "Use --help for usage."
+            echo "Use --help or -h for usage."
             exit 1
             ;;
     esac
@@ -169,6 +169,7 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
 
     ((COUNTER++))
 
+    # Mb loop (ELL-...)
     for Mb in $(seq "$MB_START" "$MB_END"); do
 
         fname=$(printf "ELL-%d-%d-%d-%d-%d-%d-%d" \
