@@ -93,6 +93,11 @@ if [[ "$RUN_MODE" == "parallel" ]]; then
     echo "[INFO] Reconstructing decomposed fields"
     reconstructPar | tee log.reconstructPar
 
+    
+    # Remove the processor directories after reconstruction to clean up
+    echo "[INFO] Cleaning up processor directories"
+    rm -rf processor*
+
 else
     echo "[INFO] Running simulation in serial"
     simpleFoam | tee log.simpleFoam
