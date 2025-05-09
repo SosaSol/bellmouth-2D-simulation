@@ -220,6 +220,12 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
     # Mb loop (ELL-...)
     for Mb in $(seq "$MB_START" "$MB_END"); do
 
+        # Skip if Mw<=3 and Mb>5
+        if [ "$Mw" -le 3 ] && [ "$Mb" -gt 3 ]; then
+            echo "[SKIP] Mw <= 3 and Mb > 5, skipping case Mw=$Mw, Mb=$Mb"
+            continue
+        fi
+
         fname=$(printf "ELL-%d-%d-%d-%d-%d-%d-%d" \
             "$Mw" "$Mb" \
             "$(awk "BEGIN{print int($Kx * 100)}")" \
