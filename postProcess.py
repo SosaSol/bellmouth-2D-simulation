@@ -16,12 +16,16 @@ import argparse
 import re
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
+import matplotlib.pyplot as plt
 
 # ────────────────────────────────
 # Argument Parsing
 # ────────────────────────────────
 
 def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
     parser = argparse.ArgumentParser(description="Extract OpenFOAM post-processing data.")
     parser.add_argument("--write", action="store_true", help="Write results to CSV")
     parser.add_argument("--plot", action="store_true", help="Plot results")
@@ -35,6 +39,13 @@ def read_last_line(path: Path) -> str:
     """
     Read the last non-empty, non-comment line of a file.
     Optimized to avoid reading entire file unnecessarily.
+
+    Args:
+        path (Path): Path to the file.
+    Returns:
+        str: The last valid line.
+    Raises:
+        ValueError: If no valid line is found.
     """
     with path.open("r") as f:
         for line in reversed(f.readlines()):
@@ -46,6 +57,14 @@ def read_last_line(path: Path) -> str:
 def read_value_from_last_line(path: Path, index: int = -1) -> float:
     """
     Extract a specific token (by index) from the last valid line of a file.
+
+    Args:
+        path (Path): Path to the file.
+        index (int): Index of the token to extract (0-based, negative for reverse).
+    Returns:
+        float: The extracted value.
+    Raises:
+        ValueError: If the index is out of range or if the file is empty.
     """
     line = read_last_line(path)
     tokens = line.split()
@@ -56,7 +75,17 @@ def read_value_from_last_line(path: Path, index: int = -1) -> float:
 def read_values(file_path: Path, iter_col: int = 0, value_col: int = -1) -> Tuple[List[float], List[float]]:
     """
     Read columns of iteration and value data from a file.
-    Returns (iterations, values).
+    Ignores empty lines and comments.
+
+    Args:
+        file_path (Path): Path to the file.
+        iter_col (int): Column index for iterations (0-based).
+        value_col (int): Column index for values (0-based, negative for reverse).
+    Returns:
+        Tuple[List[float], List[float]]: Two lists containing iterations and values.
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file is malformed or if the indices are out of range.
     """
     if not file_path.exists():
         raise FileNotFoundError(f"{file_path} not found")
@@ -79,7 +108,14 @@ def read_values(file_path: Path, iter_col: int = 0, value_col: int = -1) -> Tupl
 
 def safe_glob(base: Path, pattern: str) -> Path:
     """
-    Find the first file that matches a pattern, or raise.
+    Safely glob for a file, raising an error if not found.
+    Args:
+        base (Path): Base directory to search in.
+        pattern (str): Glob pattern to match.
+    Returns:
+        Path: The first matching file.
+    Raises:
+        FileNotFoundError: If no matching file is found.
     """
     try:
         return next(base.glob(pattern))
@@ -89,6 +125,10 @@ def safe_glob(base: Path, pattern: str) -> Path:
 def get_required_files(case_dir: Path) -> Dict[str, Path]:
     """
     Collect paths to required post-processing output files.
+    Args:
+        case_dir (Path): Directory containing the case data.
+    Returns:
+        dict (Dict[str, Path]): Dictionary mapping file identifiers to paths.
     """
     base = case_dir / "postProcessing"
     return {
@@ -106,11 +146,17 @@ def get_required_files(case_dir: Path) -> Dict[str, Path]:
 def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float, float]]:
     """
     Extract key metrics from one simulation case:
-    - iteration count
-    - pressure outlet
-    - head loss (p_in - p_out)
-    - mass flow rate
-    - max yPlus
+    Args:
+        case_dir (Path): Directory containing the case data.
+    Returns:
+        case_data (Optional[Tuple[int, float, float, float, float]]): Tuple containing:
+            - iteration count
+            - pressure outlet
+            - head loss
+            - mass flow rate
+            - max yPlus
+    Raises:
+        Exception: If any required file is missing or malformed.
     """
     try:
         files = get_required_files(case_dir)
@@ -130,8 +176,19 @@ def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float
 # Plotting
 # ────────────────────────────────
 
-def plot_data(case_dir: Path, name: str) -> None:
-    import matplotlib.pyplot as plt
+def plot_data(case_dir: Path, name: str, plot:bool=False, write:bool=False, postproc_dir:Path=None) -> None:
+    """
+    Plot post-processing data for a given case.
+    Generates plots for pressure outlet, mass flow rate, and yPlus.
+    Saves plots to the case directory if write is True.
+    
+    Args:
+        case_dir (Path): Directory containing the case data.
+        name (str): Name of the case.
+        plot (bool): Whether to display the plots.
+        write (bool): Whether to save the plots as PNG files.
+        postproc_dir (Path): Directory to save the plots.
+    """
 
     try:
         base = case_dir / "postProcessing"
@@ -170,13 +227,24 @@ def plot_data(case_dir: Path, name: str) -> None:
     plt.grid(True)
 
     plt.tight_layout()
-    plt.show()
+    if write:
+        plt.savefig(postproc_dir / f"{name}.png")
+        print(f"[OK] Saved plot for {name} to {postproc_dir}")
+    if plot: 
+        plt.show()
 
 # ────────────────────────────────
 # Utility: Natural Sorting
 # ────────────────────────────────
 
 def natural_key(path: Path) -> List:
+    """
+    Generate a natural sorting key for a path.
+    Args:
+        path (Path): Path to the file or directory.
+    Returns:
+        list (List): A list of components for natural sorting.
+    """
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', path.name)]
 
 # ────────────────────────────────
@@ -187,18 +255,27 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
     """
     Identify case geometry and parameters from directory name.
     Returns (geometry, key, (Mb, Mw)) or (None, None, None) if unknown.
+    Args:
+        name (str): Name of the case directory.
+    Returns:
+        tuple (Tuple[Optional[str], Optional[str], Optional[Tuple[int, int]]]): Tuple containing:
+            - geometry type (e.g., "ELL", "IN", "RAD")
+            - key (e.g., "Kx-Ky-r-L-t")
+            - dimensions (Mb, Mw)
+    Raises:
+        ValueError: If the name format is unrecognized.
     """
     parts = name.split("-")
     try:
         if name.startswith("ELL-"):
             _, Mw, Mb, Kx, Ky, r, L, t = parts
-            return "ELL", f"{Kx}_{Ky}_{r}_{L}", (int(Mb), int(Mw))
+            return "ELL", f"{Kx}-{Ky}-{r}-{L}-{t}", (int(Mb), int(Mw))
         elif name.startswith("IN-"):
             _, Mw, L, t = parts
-            return "IN", L, (1, int(Mw))
+            return "IN", f"{L}-{t}", (1, int(Mw))
         elif name.startswith("RAD-"):
             _, Mw, Mb, K, L, t = parts
-            return "RAD", f"{K}_{L}", (int(Mb), int(Mw))
+            return "RAD", f"{K}-{L}-{t}", (int(Mb), int(Mw))
     except ValueError:
         pass
     return None, None, None
@@ -208,6 +285,12 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
 # ────────────────────────────────
 
 def main(write: bool = False, plot: bool = False) -> None:
+    """
+    Main function to process OpenFOAM outputs.
+    Args:
+        write (bool): Whether to write results to CSV files.
+        plot (bool): Whether to generate plots.
+    """
     base_outputs = Path("outputs")
     if not base_outputs.exists():
         print(f"[ERROR] Base outputs directory not found: {base_outputs}")
@@ -259,8 +342,7 @@ def main(write: bool = False, plot: bool = False) -> None:
                 "max_yplus": max_yplus,
             }
 
-            if plot:
-                plot_data(case, name)
+            plot_data(case, name, plot, write, postproc_dir)
 
         if write:
             import pandas as pd
@@ -280,11 +362,11 @@ def main(write: bool = False, plot: bool = False) -> None:
                     df_flow.at[mb, mw] = vals["massflow"]
                     df_yplus.at[mb, mw] = vals["max_yplus"]
 
-                base = f"{geom}_{key}"
+                base = f"{geom}-{key}"
                 df_head.to_csv(postproc_dir / f"{base}_head_losses.csv")
                 df_flow.to_csv(postproc_dir / f"{base}_massflow.csv")
                 df_yplus.to_csv(postproc_dir / f"{base}_max_yplus.csv")
-                print(f"[OK] Saved CSVs for {geom}/{key} in {postproc_dir}")
+                print(f"[OK] Saved CSVs for {base} in {postproc_dir}")
 
     print("\nAll processing complete.")
 
