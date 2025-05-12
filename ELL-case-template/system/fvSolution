@@ -13,15 +13,18 @@ FoamFile
     object      fvSolution;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// https://www.wolfdynamics.com/wiki/tipsandtricks.pdf
 
 solvers
 {
     p
     {
         solver          GAMG;
-        tolerance       1e-10;
-        relTol          0.1;
         smoother        DICGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.05;
+        minIter         3;
+        maxIter         100;
         // GPT suggestions
         // nPreSweeps      0;
         // nPostSweeps     2;
@@ -31,24 +34,30 @@ solvers
     {
         solver          smoothSolver;
         smoother        symGaussSeidel;
-        tolerance       1e-10;
-        relTol          0.1;
+        tolerance       1e-8;
+        relTol          0.0;
+        minIter         1;
+        maxIter         100;
     }
     
     k
     {
         solver          smoothSolver;
         smoother        GaussSeidel;
-        tolerance       1e-10;
-        relTol          0.1;
+        tolerance       1e-8;
+        relTol          0.05;
+        minIter         1;
+        maxIter         100;
     }
 
     omega
     {
         solver          smoothSolver;
         smoother        GaussSeidel;
-        tolerance       1e-10;
-        relTol          0.1;
+        tolerance       1e-8;
+        relTol          0.05;
+        minIter         1;
+        maxIter         100;
     }
 }
 
@@ -77,7 +86,7 @@ relaxationFactors
 
 potentialFlow
 {
-    nNonOrthogonalCorrectors 3;
+    nNonOrthogonalCorrectors 2;
 }
 
 
