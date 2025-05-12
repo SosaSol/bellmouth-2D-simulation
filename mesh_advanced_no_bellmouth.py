@@ -26,7 +26,23 @@ ANGLE = 180 - 171.79  # degrees
 GAP2 = 42.56e-3  # m
 DELTA_H = L2 * math.tan(ANGLE * math.pi/180)  # m
 
-t = GAP2/2
+# t = GAP2/2  # m
+
+## Dimension en Largeur
+# 2x2 à 3x3
+t_22 = 55e-3  # m
+# 4x4 à 12x12
+t_44 = 75e-3  # m
+# tilting machine
+t_tilt = 125e-3  # m
+# avec les racks info et PDBox
+t_rack = 528e-3  # m 
+
+## Dimension en hauteur
+# 2x2 à 3x3
+# t = 64.1e-3  # m
+# 4x4 à 12x12
+# t = 84.1e-3  # m
 
 SAVE_ROOT = Path.cwd()
 
@@ -44,7 +60,6 @@ def parse_args():
     
     parser.add_argument("--Mw", type=int, default=12, help="Number of wires")
 
-
     parser.add_argument("--xmin", type=float, default=0, help="X min (in meters)")
     parser.add_argument("--ymin", type=float, default=0, help="Y min (in meters)")
     parser.add_argument("--xmax", type=float, default=25, help="X max (in meters)")
@@ -59,9 +74,11 @@ def parse_args():
 # -----------------------------
 def compute_geometry_parameters(Mw: int) -> float:
     """
-    Compute key geometry parameters based on input multipliers.
+    Compute key geometry parameters.
+    Parameters:
+        Mw (int): Number of WindShaper modules
     Returns:
-        Di: inlet width [m]
+        Di (float): inlet width [m]
     """
     # Di and Db are calculated as:
     Di = Mw * MODULE_WIDTH + (Mw - 1) * GAP  # inlet width in meters
@@ -86,10 +103,17 @@ def create_geometry(
         ) -> tuple[int, list[int], list[int]]:
     """
     Build the parametric 2D bellmouth inlet geometry.
+    Parameters:
+        Mw (int): Number of WindShaper modules
+        xmin (float): Minimum x-coordinate
+        ymin (float): Minimum y-coordinate
+        xmax (float): Maximum x-coordinate
+        ymax (float): Maximum y-coordinate
     Returns:
-        surface: the tag of the created surface
-        curve_tags: list of all curve tags in order
-        edge_points: point tags for boundary layer end
+        surface (int): Surface tag of the created geometry
+        curve_tags (list[int]): List of curve tags for the geometry
+        edge_points (list[int]): List of edge point tags for boundary layer
+        corner_points (list[int]): List of corner point tags for refinement
     """
     logging.info("Building geometry...")
 
@@ -111,6 +135,12 @@ def create_geometry(
     # Store corner points for refinement
     corner_points = []
 
+    # define the end thickness t_end
+    if Mw <= 3:
+        t_end = t_22
+    elif Mw <= 12:
+        t_end = t_44
+
     # If Mw odd
     if Mw % 2 == 1:
         pts.append(add_point(xmax, ymin))            # p2         
@@ -121,10 +151,6 @@ def create_geometry(
             y4 = y1 + GAP2
             y3 = y4 - DELTA_H
 
-            if i == N-1:
-                y4 = y1 + GAP2/2
-                y3 = y4
-
             pts.append(add_point(xmax, y2))
             edge_points.append(pts[-1])  # Store edge point for boundary layer
             pts.append(add_point(x3, y2))
@@ -132,6 +158,9 @@ def create_geometry(
             pts.append(add_point(x1, y1))
             corner_points.append(pts[-1])  # Store corner point for refinement
 
+            if i == N-1:
+                y4 = y1 + t_end
+                y3 = y4
             pts.append(add_point(x1, y4))
             corner_points.append(pts[-1])  # Store corner point for refinement
 
@@ -150,20 +179,21 @@ def create_geometry(
             y3 = y4 - DELTA_H
 
             if i == 0:
-                pts.append(add_point(x1, ymin))            # p2
-                edge_points.append(pts[-1])  # Store edge point for boundary layer
+                pts.append(add_point(x1, ymin)) # p2
+                edge_points.append(pts[-1])     # Store edge point for boundary layer
                 y4 = GAP2/2
                 y3 = y4 - DELTA_H
             elif i!= 0:
-                if i == N-1:
-                    y4 = y1 + GAP2/2
-                    y3 = y4
                 pts.append(add_point(xmax, y2))
-                edge_points.append(pts[-1])  # Store edge point for boundary layer
+                edge_points.append(pts[-1])     # Store edge point for boundary layer
                 pts.append(add_point(x3, y2))
                 pts.append(add_point(x2, y1))
                 pts.append(add_point(x1, y1))
-                corner_points.append(pts[-1])  # Store corner point for refinement
+                corner_points.append(pts[-1])   # Store corner point for refinement
+
+                if i == N-1:
+                    y4 = y1 + t_end
+                    y3 = y4
 
             pts.append(add_point(x1, y4))
             corner_points.append(pts[-1])  # Store corner point for refinement
@@ -223,7 +253,7 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     u_tau = U_inf * math.sqrt(Cf / 2)       # Friction velocity
     yp = y_plus * nu / u_tau                # First cell height for desired y+
     y1 = 2*yp                               # Total height of the first cell 
-    y1 = y1 / 4                             # Ajust from simulation results
+    y1 = y1 / 2                             # Ajust from simulation results
 
     # Growth Ratio
     delta99 = 4.91*x/Re_x**0.5 if Re_x<5e5 else 0.38*x/Re_x**0.2 # Boundary layer thickness
@@ -281,11 +311,11 @@ def apply_multiple_boundary_layers(all_edge_points: list, x: float, n_layers: in
     Apply multiple boundary layers to the geometry based on edge points.
     
     Parameters:
-    - all_edge_points: List of edge points for the boundary layers
-    - x: Distance from leading edge [m] (for estimating Cf and delta99)
-    - n_layers: Number of boundary layer layers
-    - y_plus: Desired dimensionless first cell height
-    - U_inf: Freestream velocity [m/s]
+    - all_edge_points (list): List of edge points for the boundary layers
+    - x (float): Distance from leading edge [m] (for estimating Cf and delta99)
+    - n_layers (int): Number of boundary layer layers
+    - y_plus (float): Desired dimensionless first cell height
+    - U_inf (float): Freestream velocity [m/s]
    
     Returns:
     - wall_curve_tags: List of curve tags for the wall boundary layers
@@ -471,8 +501,6 @@ def print_info(
     logging.info("Geometry parameters:")
     logging.info(f"          - Mesh tag suffix            : {fname}")
     logging.info(f"          - WindShaper modules         : {Mw}")
-    logging.info(f"          - Straight section len (mm)  : {L * 1e3:.1f}")
-    logging.info(f"          - Bellmouth thickness (mm)   : {t * 1e3:.1f}")
 
     logging.info(f"Domain bounds -> X: [{xmin}, {xmax}], Y: [{ymin}, {ymax}]")
     logging.info(f"Using {nt} threads for GMSH.")
@@ -486,7 +514,7 @@ def validate_args(args):
     Validate input arguments and raise ValueError for invalid entries.
     """
     if args.Mw <= 0:
-        raise ValueError("Mw (Number of wires) must be greater than 0.")
+        raise ValueError("Mw (Number of WindShaper modules) must be greater than 0.")
     if args.xmin >= args.xmax:
         raise ValueError("xmin must be less than xmax.")
     if args.ymin >= args.ymax:
@@ -498,15 +526,15 @@ def validate_args(args):
 # -----------------------------
 # Main Execution
 # -----------------------------
-def main(Mw:int=12, 
-         xmin:float=0, ymin:float=0, xmax:float=25, ymax:float=25,
-        nt:int=10, sd:str=None):
+def main(Mw:int,
+         xmin:float, ymin:float, xmax:float, ymax:float,
+         nt:int, sd:str):
     """
     Main function to generate the mesh using GMSH.
     """
 
     # Define name and path for mesh file
-    fname = f"IN-{Mw}-{int(L*1e3)}-{int(t*1e3)}"
+    fname = f"IN-{Mw}"
     save_path = Path(sd) if sd else Path("outputs/meshes")
     # logging.info(f"Save path: {save_path}")
     
@@ -526,7 +554,7 @@ def main(Mw:int=12,
 
     # Apply boundary layer
     logging.info("Applying boundary layers...")
-    wall_curve_tags = apply_multiple_boundary_layers(all_edge_points=edge_points, x=L, n_layers=22, y_plus=0.95, U_inf=16)
+    wall_curve_tags = apply_multiple_boundary_layers(all_edge_points=edge_points, x=L, n_layers=19, y_plus=0.95, U_inf=16)
     
     # Refine mesh
     Di = compute_geometry_parameters(Mw)
@@ -554,7 +582,7 @@ def main(Mw:int=12,
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
-    
+
     # Save mesh
     logging.info("Saving mesh...")
     save_mesh(fname, save_path=save_path)

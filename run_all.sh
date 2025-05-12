@@ -57,7 +57,7 @@ fi
 
 # ---------------------- Constants ----------------------
 Kx=0.33; Ky=0.33
-r=0.050
+r=0.100
 
 L1=0.16866  # m
 L2=0.13029  # m
@@ -65,7 +65,8 @@ L3=0.03986  # m
 L=$(awk "BEGIN {print $L1 + $L2 + $L3}")  # m
 
 GAP2=0.04256  # m
-t=$(awk "BEGIN {print $GAP2 / 2}")  # m
+t_end=$(awk "BEGIN {print $GAP2 / 2}")  # m
+t=0.010  # m
 
 xmin=0.0; ymin=0.0
 xmax=25.0; ymax=25.0
@@ -73,7 +74,7 @@ xmax=25.0; ymax=25.0
 nt=$NP
 
 MW_START=2; MW_END=12
-MB_START=2; MB_END=12
+MB_START=2; MB_END=6 # limit the ellipse width at 1.5m
 
 # ---------------------- Functions ----------------------
 
@@ -99,6 +100,8 @@ run_case() {
         echo "[INFO] Start: $(date)"
         echo "=================================================="
 
+        local start_time=$(date +%s)
+
         if [ -d "$case_path" ]; then
             echo "[INFO] Overwriting existing case"
             rm -rf "$case_path"
@@ -111,7 +114,12 @@ run_case() {
         generate_mesh "$case_path" "$case_name" "$mesh_script" "$mesh_args"
         run_simulation "$case_path"
 
-        echo "[DONE] Case finished: $case_name"
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        
+        printf "[DONE] Case finished: %s (Duration: %02d:%02d:%02d)\n" \
+            "$case_name" $((duration / 3600)) $(((duration % 3600) / 60)) $((duration % 60))
+
         echo "[INFO] End: $(date)"
         echo
     } 2>&1 | tee "$log_file"
@@ -175,7 +183,7 @@ if [ "$ADVANCED" == true ]; then
     LOG_DIR="${SCRIPT_DIR}/logs/advanced"
     MESH_SCRIPT="mesh_advanced_with_bellmouth.py"
     MESH_SCRIPT_STRAIGHT="mesh_advanced_no_bellmouth.py"
-    MESH_FLAGS="--Kx $Kx --Ky $Ky --r $r --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
+    MESH_FLAGS="--Kx $Kx --Ky $Ky --t $t --r $r --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
     MESH_FLAGS_STRAIGHT="--xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
 else
     OUTPUT_DIR="${SCRIPT_DIR}/outputs/simple"
@@ -201,10 +209,7 @@ echo
 # ---------------------- Main Loop ----------------------
 for Mw in $(seq "$MW_START" "$MW_END"); do
     # Straight case (IN-...)
-    straight_fname=$(printf "IN-%d-%d-%d" \
-        "$Mw" \
-        "$(awk "BEGIN{print int($L * 1000)}")" \
-        "$(awk "BEGIN{print int($t * 1000)}")")
+    straight_fname=$(printf "IN-%d" "$Mw" )
 
     straight_case_path="${OUTPUT_DIR}/${straight_fname}"
     straight_log_file="${LOG_DIR}/${straight_fname}.log"
@@ -220,19 +225,19 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
     # Mb loop (ELL-...)
     for Mb in $(seq "$MB_START" "$MB_END"); do
 
-        # Skip if Mw<=3 and Mb>5
-        if [ "$Mw" -le 3 ] && [ "$Mb" -gt 3 ]; then
-            echo "[SKIP] Mw <= 3 and Mb > 5, skipping case Mw=$Mw, Mb=$Mb"
-            continue
-        fi
+        # # Skip if Mw<=3 and Mb>5
+        # if [ "$Mw" -le 3 ] && [ "$Mb" -gt 3 ]; then
+        #     echo "[SKIP] Mw <= 3 and Mb > 5, skipping case Mw=$Mw, Mb=$Mb"
+        #     continue
+        # fi
 
-        fname=$(printf "ELL-%d-%d-%d-%d-%d-%d-%d" \
+        fname=$(printf "ELL-%d-%d-%d-%d-%d-%d" \
             "$Mw" "$Mb" \
             "$(awk "BEGIN{print int($Kx * 100)}")" \
             "$(awk "BEGIN{print int($Ky * 100)}")" \
-            "$(awk "BEGIN{print int($r * 1000)}")" \
-            "$(awk "BEGIN{print int($L * 1000)}")" \
-            "$(awk "BEGIN{print int($t * 1000)}")")
+            "$(awk "BEGIN{print int($t * 1000)}")" \
+            "$(awk "BEGIN{print int($r * 1000)}")")
+
 
         case_path="${OUTPUT_DIR}/${fname}"
         log_file="${LOG_DIR}/${fname}.log"
