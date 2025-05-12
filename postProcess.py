@@ -260,7 +260,7 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
     Returns:
         tuple (Tuple[Optional[str], Optional[str], Optional[Tuple[int, int]]]): Tuple containing:
             - geometry type (e.g., "ELL", "IN", "RAD")
-            - key (e.g., "Kx-Ky-r-L-t")
+            - key (e.g., "Kx-Ky-t-r")
             - dimensions (Mb, Mw)
     Raises:
         ValueError: If the name format is unrecognized.
@@ -268,14 +268,14 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
     parts = name.split("-")
     try:
         if name.startswith("ELL-"):
-            _, Mw, Mb, Kx, Ky, r, L, t = parts
-            return "ELL", f"{Kx}-{Ky}-{r}-{L}-{t}", (int(Mb), int(Mw))
+            _, Mw, Mb, Kx, Ky, t, r = parts
+            return "ELL", f"{Kx}-{Ky}-{t}-{r}", (int(Mb), int(Mw))
         elif name.startswith("IN-"):
-            _, Mw, L, t = parts
-            return "IN", f"{L}-{t}", (1, int(Mw))
+            _, Mw, = parts
+            return "IN","", (0, int(Mw))
         elif name.startswith("RAD-"):
-            _, Mw, Mb, K, L, t = parts
-            return "RAD", f"{K}-{L}-{t}", (int(Mb), int(Mw))
+            _, Mw, Mb, K, t = parts
+            return "RAD", f"{K}-{t}", (int(Mb), int(Mw))
     except ValueError:
         pass
     return None, None, None
@@ -362,7 +362,11 @@ def main(write: bool = False, plot: bool = False) -> None:
                     df_flow.at[mb, mw] = vals["massflow"]
                     df_yplus.at[mb, mw] = vals["max_yplus"]
 
-                base = f"{geom}-{key}"
+                if geom == "IN":
+                    base = f"{geom}"
+                else:
+                    base = f"{geom}-{key}"
+                
                 df_head.to_csv(postproc_dir / f"{base}_head_losses.csv")
                 df_flow.to_csv(postproc_dir / f"{base}_massflow.csv")
                 df_yplus.to_csv(postproc_dir / f"{base}_max_yplus.csv")
