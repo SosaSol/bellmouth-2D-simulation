@@ -253,7 +253,7 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     u_tau = U_inf * math.sqrt(Cf / 2)       # Friction velocity
     yp = y_plus * nu / u_tau                # First cell height for desired y+
     y1 = 2*yp                               # Total height of the first cell 
-    y1 = y1 / 2                             # Ajust from simulation results
+    y1 = y1 * 2/7                           # Ajust from simulation results
 
     # Growth Ratio
     delta99 = 4.91*x/Re_x**0.5 if Re_x<5e5 else 0.38*x/Re_x**0.2 # Boundary layer thickness
