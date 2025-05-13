@@ -212,43 +212,46 @@ def plot_data(case_dir: Path, name: str, plot:bool=False, write:bool=False, post
         return
 
     def rel_error(values) -> List[float]:
-        """Compute relative error between consecutive steps.
+        """Compute relative error in % between consecutive steps.
         Args:
             values (list): List of values.
         Returns:
-            list: List of relative errors.
+            list: List of relative errors in %.
         """
-        return [0] + [abs((v2 - v1) / v1) if v1 != 0 else 0 for v1, v2 in zip(values[:-1], values[1:])]
+        return [0] + [abs((v2 - v1) / v1)*100 if v1 != 0 else 0 for v1, v2 in zip(values[:-1], values[1:])]
     
-    plt.figure(figsize=(10, 6))
+    _, axs = plt.subplots(3, 1, figsize=(10, 8))
 
-    plt.subplot(3, 1, 1)
-    plt.plot(*pout, label="Pressure Outlet", color="blue", linestyle='--', marker='o')
-    plt.title(f"{name} - Pressure Outlet")
-    plt.xlabel("Iterations")
-    plt.ylabel("Pressure (Pa)")
-    plt.grid(True)
+    data_pairs = [
+        (pout, "Total Pressure Outlet", "Pressure (Pa)", "blue"),
+        (mflow, "Outlet Mass Flow Rate", "Outlet Mass Flow Rate (kg/s)", "green"),
+        (yplus, "Max yPlus", "Max y+", "red")
+    ]
 
-    plt.subplot(3, 1, 2)
-    plt.plot(*mflow, label="Mass Flow", color="green", linestyle='--', marker='o')
-    plt.title(f"{name} - Mass Flow Rate")
-    plt.xlabel("Iterations")
-    plt.ylabel("kg/s")
-    plt.grid(True)
+    for ax, (data, title, ylabel, color) in zip(axs, data_pairs):
+        x, y = data
+        ax.plot(x, y, label=title, color=color, linestyle='--', marker='o')
+        ax.set_title(f"{name} - {title}")
+        ax.set_xlabel("Iterations")
+        ax.set_ylabel(ylabel)
+        ax.grid(True)
+        # remove offset from y-axis
+        ax.ticklabel_format(style='plain', axis='y', useOffset=False)
 
-    plt.subplot(3, 1, 3)
-    plt.plot(*yplus, label="yPlus", color="red", linestyle='--', marker='o')
-    plt.title(f"{name} - Max yPlus")
-    plt.xlabel("Iterations")
-    plt.ylabel("yPlus")
-    plt.grid(True)
+        # Plot relative error on second y-axis
+        ax2 = ax.twinx()
+        rel_err = rel_error(y)
+        ax2.plot(x[2:], rel_err[2:], color="gray", linestyle=":", marker='o', fillstyle='none' , label="Rel. Error")
+        ax2.set_ylabel("Rel. Error (%)", color="gray")
+        ax2.tick_params(axis='y', labelcolor="gray")
 
     plt.tight_layout()
+
     if write:
         plt.savefig(postproc_dir / f"{name}.png")
         plt.close()
         logger.info(f"Saved plot for {name} to {postproc_dir}")
-    if plot: 
+    if plot:
         plt.show()
     else:
         plt.close()
