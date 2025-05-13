@@ -17,6 +17,14 @@ import re
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import matplotlib.pyplot as plt
+import logging
+import time
+
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s]\t%(message)s')
+logger = logging.getLogger(__name__)
+logging.addLevelName(logging.WARNING, "WARN")   # Override the default 'WARNING' level name
+
+start_time = time.time()
 
 # ────────────────────────────────
 # Argument Parsing
@@ -167,7 +175,7 @@ def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float
         y_plus  = read_value_from_last_line(files['y_plus'], -2)
         return int(it), pout, (pin - pout), mrate, y_plus
     except Exception as e:
-        print(f"[ERROR] Failed to extract data from {case_dir.name}")
+        logger.error(f"Failed to extract data from {case_dir.name}")
         import traceback
         traceback.print_exc()
         return None
@@ -196,13 +204,22 @@ def plot_data(case_dir: Path, name: str, plot:bool=False, write:bool=False, post
         mflow = read_values(safe_glob(base, "massFlowRateOutlet1/0/surfaceFieldValue.dat"))
         yplus = read_values(safe_glob(base, "yPlus1/0/yPlus.dat"), value_col=-2)
     except Exception:
-        print(f"[ERROR] Failed to read plot data for {name}")
+        logger.error(f"Failed to read plot data for {name}")
         return
 
     if any(len(x[0]) <= 1 for x in [pout, mflow, yplus]):
-        print(f"[WARN] Not enough data to plot for {name}")
+        logger.warning(f"Not enough data to plot for {name}")
         return
 
+    def rel_error(values) -> List[float]:
+        """Compute relative error between consecutive steps.
+        Args:
+            values (list): List of values.
+        Returns:
+            list: List of relative errors.
+        """
+        return [0] + [abs((v2 - v1) / v1) if v1 != 0 else 0 for v1, v2 in zip(values[:-1], values[1:])]
+    
     plt.figure(figsize=(10, 6))
 
     plt.subplot(3, 1, 1)
@@ -229,10 +246,12 @@ def plot_data(case_dir: Path, name: str, plot:bool=False, write:bool=False, post
     plt.tight_layout()
     if write:
         plt.savefig(postproc_dir / f"{name}.png")
-        print(f"[OK] Saved plot for {name} to {postproc_dir}")
+        plt.close()
+        logger.info(f"Saved plot for {name} to {postproc_dir}")
     if plot: 
         plt.show()
-
+    else:
+        plt.close()
 # ────────────────────────────────
 # Utility: Natural Sorting
 # ────────────────────────────────
@@ -293,13 +312,15 @@ def main(write: bool = False, plot: bool = False) -> None:
     """
     base_outputs = Path("outputs")
     if not base_outputs.exists():
-        print(f"[ERROR] Base outputs directory not found: {base_outputs}")
+        logger.error(f"Base outputs directory not found: {base_outputs}")
         sys.exit(1)
 
     all_subdirs = [d for d in base_outputs.iterdir() if d.is_dir()]
     if not all_subdirs:
-        print("[ERROR] No subdirectories found in outputs/.")
+        logger.error("No subdirectories found in outputs/.")
         sys.exit(1)
+
+    summary_data = []
 
     for subdir in all_subdirs:
         output_dir = subdir
@@ -307,17 +328,19 @@ def main(write: bool = False, plot: bool = False) -> None:
         postproc_dir.mkdir(parents=True, exist_ok=True)
 
         cases = sorted([p for p in output_dir.iterdir() if p.is_dir()], key=natural_key)
-        print(f"\n>>> Processing '{subdir.name}' with {len(cases)} cases")
+        print("")
+        logger.info(f">>> Processing '{subdir.name}' with {len(cases)} cases")
 
         results: Dict[Tuple[str, str], Dict[Tuple[int, int], Dict[str, float]]] = {}
 
         for case in cases:
             name = case.name
-            print(f"\nProcessing: {name}")
+            print("")
+            logger.info(f"Processing: {name}")
 
             geom, key, dims = parse_case_name(name)
             if not geom:
-                print(f"[WARN] Skipping unknown format: {name}")
+                logger.warning(f"Skipping unknown format: {name}")
                 continue
 
             data = extract_case_data(case)
@@ -326,15 +349,15 @@ def main(write: bool = False, plot: bool = False) -> None:
 
             n_iter, pt_out, head_loss, massflow, max_yplus = data
 
-            print(f"  - Iterations:      {n_iter}")
-            print(f"  - Pressure Out:    {pt_out:.4f} Pa")
-            print(f"  - Head Loss:       {head_loss:.4f} Pa")
-            print(f"  - Mass Flow Rate:  {massflow:.4f} kg/s")
-            print(f"  - Max yPlus:       {max_yplus:.2f}")
+            logger.info(f"  - Iterations:      {n_iter}")
+            logger.info(f"  - Pressure Out:    {pt_out:.4f} Pa")
+            logger.info(f"  - Head Loss:       {head_loss:.4f} Pa")
+            logger.info(f"  - Mass Flow Rate:  {massflow:.4f} kg/s")
+            logger.info(f"  - Max yPlus:       {max_yplus:.2f}")
             if max_yplus > 5:
-                print("  WARNING: yPlus > 5!")
+                logger.warning("yPlus > 5!")
             elif max_yplus >= 1:
-                print("  WARNING: yPlus between 1 and 5.")
+                logger.warning("yPlus between 1 and 5.")
 
             results.setdefault((geom, key), {})[dims] = {
                 "head_loss": head_loss,
@@ -342,11 +365,24 @@ def main(write: bool = False, plot: bool = False) -> None:
                 "max_yplus": max_yplus,
             }
 
-            plot_data(case, name, plot, write, postproc_dir)
+            summary_data.append({
+                "geometry": geom,
+                "key": key,
+                "Mb": dims[0],
+                "Mw": dims[1],
+                "head_loss": head_loss,
+                "massflow": massflow,
+                "max_yplus": max_yplus,
+                "case_name": name
+            })
+
+            if plot or write:
+                plot_data(case, name, plot, write, postproc_dir)
 
         if write:
             import pandas as pd
 
+            print("")
             for (geom, key), data in results.items():
                 Mb_vals = sorted(set(mb for mb, _ in data))
                 Mw_vals = sorted(set(mw for _, mw in data))
@@ -370,10 +406,17 @@ def main(write: bool = False, plot: bool = False) -> None:
                 df_head.to_csv(postproc_dir / f"{base}_head_losses.csv")
                 df_flow.to_csv(postproc_dir / f"{base}_massflow.csv")
                 df_yplus.to_csv(postproc_dir / f"{base}_max_yplus.csv")
-                print(f"[OK] Saved CSVs for {base} in {postproc_dir}")
+                logger.info(f"Saved CSVs for {base} in {postproc_dir}")
+            
+        if write and summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_csv(Path("postProcessingOutputs") / "all_cases_summary.csv", index=False)
+            logger.info("Saved all-cases summary to postProcessingOutputs/all_cases_summary.csv")
 
-    print("\nAll processing complete.")
 
+    print("")
+    logger.info("All processing complete.")
+    logger.info(f"Total runtime: {time.time() - start_time:.2f} seconds")
 
 # ────────────────────────────────
 # Script Entry Point
