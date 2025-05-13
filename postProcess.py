@@ -15,9 +15,10 @@ import sys
 import argparse
 import re
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Union
 import matplotlib.pyplot as plt
 import logging
+import traceback
 import time
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s]\t%(message)s')
@@ -176,7 +177,6 @@ def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float
         return int(it), pout, (pin - pout), mrate, y_plus
     except Exception as e:
         logger.error(f"Failed to extract data from {case_dir.name}")
-        import traceback
         traceback.print_exc()
         return None
 
@@ -211,20 +211,20 @@ def plot_data(case_dir: Path, name: str, plot:bool=False, write:bool=False, post
         logger.warning(f"Not enough data to plot for {name}")
         return
 
-    def rel_error(values) -> List[float]:
+    def rel_error(values, eps=1e-10) -> List[float]:
         """Compute relative error in % between consecutive steps.
         Args:
             values (list): List of values.
         Returns:
             list: List of relative errors in %.
         """
-        return [0] + [abs((v2 - v1) / v1)*100 if v1 != 0 else 0 for v1, v2 in zip(values[:-1], values[1:])]
+        return [eps] + [abs((v2 - v1) / v1)*100 if v1 != 0 else 0 for v1, v2 in zip(values[:-1], values[1:])]
     
     _, axs = plt.subplots(3, 1, figsize=(10, 8))
 
     data_pairs = [
-        (pout, "Total Pressure Outlet", "Pressure (Pa)", "blue"),
-        (mflow, "Outlet Mass Flow Rate", "Outlet Mass Flow Rate (kg/s)", "green"),
+        (pout, "Outlet Total Pressure", "Pressure (Pa)", "blue"),
+        (mflow, "Outlet Mass Flow Rate", "Mass Flow Rate (kg/s/m)", "green"),
         (yplus, "Max yPlus", "Max y+", "red")
     ]
 
@@ -243,11 +243,14 @@ def plot_data(case_dir: Path, name: str, plot:bool=False, write:bool=False, post
         rel_err = rel_error(y)
         ax2.plot(x[2:], rel_err[2:], color="gray", linestyle=":", marker='o', fillstyle='none' , label="Rel. Error")
         ax2.set_ylabel("Rel. Error (%)", color="gray")
+        # ax2.set_yscale('log')
+        # ax2.set_ylim(-0.01, 0.5)
         ax2.tick_params(axis='y', labelcolor="gray")
 
     plt.tight_layout()
 
     if write:
+        postproc_dir.mkdir(parents=True, exist_ok=True)
         plt.savefig(postproc_dir / f"{name}.png")
         plt.close()
         logger.info(f"Saved plot for {name} to {postproc_dir}")
@@ -303,6 +306,66 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
     return None, None, None
 
 # ────────────────────────────────
+# Process Case
+# ────────────────────────────────
+
+def process_single_case(case: Path, postproc_dir: Path, plot: bool, write: bool) -> Optional[Tuple[Tuple[str, str], Tuple[int, int], Dict[str, Union[float, str]]]]:
+    """
+    Worker function for processing a single simulation case.
+    Args:
+        case (Path): Path to the case directory.
+        postproc_dir (Path): Directory to save post-processing outputs.
+        plot (bool): Whether to display plots.
+        write (bool): Whether to write results to CSV files.
+    Returns:
+        out_data (Tuple[Tuple[str, str], Tuple[int, int], Dict[str, Union[float, str]]]): Tuple containing:
+            - geometry and key
+            - dimensions (Mb, Mw) (int, int)
+            - case data (dict): dictionary containing: 
+                - geometry
+                - key
+                - Mw
+                - Mb
+                - pt_out
+                - head_loss
+                - massflow
+                - max yPlus
+                - iterations
+                - case_name
+    """
+    name = case.name
+
+    geom, key, dims = parse_case_name(name)
+
+    if not geom:
+        print("")
+        logger.warning(f"Skipping unknown format: {name}")
+        return None
+    data = extract_case_data(case)
+    if data is None:
+        return None
+    
+    n_iter, pt_out, head_loss, massflow, max_yplus = data
+    
+    out_data = {
+        "geometry": geom,
+        "key": key,
+        "Mw": dims[1],
+        "Mb": dims[0],
+        "pt_out":     pt_out,
+        "head_loss":  head_loss,
+        "massflow":   massflow,
+        "max_yplus":  max_yplus,
+        "iterations": n_iter,
+        "case_name":  name
+    }
+
+    if plot or write:
+        plot_data(case, name, plot, write, postproc_dir)
+
+    return (geom, key), dims, out_data
+    
+# ────────────────────────────────
 # Main Workflow
 # ────────────────────────────────
 
@@ -323,72 +386,56 @@ def main(write: bool = False, plot: bool = False) -> None:
         logger.error("No subdirectories found in outputs/.")
         sys.exit(1)
 
-    summary_data = []
-
     for subdir in all_subdirs:
+        summary_data = []
         output_dir = subdir
         postproc_dir = Path("postProcessingOutputs") / subdir.name
-        postproc_dir.mkdir(parents=True, exist_ok=True)
-
+        
         cases = sorted([p for p in output_dir.iterdir() if p.is_dir()], key=natural_key)
+        if not cases:
+            print("")
+            logger.info(f"No cases found in {output_dir}")
+            continue
         print("")
         logger.info(f">>> Processing '{subdir.name}' with {len(cases)} cases")
 
         results: Dict[Tuple[str, str], Dict[Tuple[int, int], Dict[str, float]]] = {}
 
         for case in cases:
-            name = case.name
+
+            single_case_output = process_single_case(case, postproc_dir, plot, write)
+            
+            if not single_case_output:
+                    continue
+            (geom, key), dims, data = single_case_output
+
             print("")
-            logger.info(f"Processing: {name}")
-
-            geom, key, dims = parse_case_name(name)
-            if not geom:
-                logger.warning(f"Skipping unknown format: {name}")
-                continue
-
-            data = extract_case_data(case)
-            if data is None:
-                continue
-
-            n_iter, pt_out, head_loss, massflow, max_yplus = data
-
-            logger.info(f"  - Iterations:      {n_iter}")
-            logger.info(f"  - Pressure Out:    {pt_out:.4f} Pa")
-            logger.info(f"  - Head Loss:       {head_loss:.4f} Pa")
-            logger.info(f"  - Mass Flow Rate:  {massflow:.4f} kg/s")
-            logger.info(f"  - Max yPlus:       {max_yplus:.2f}")
-            if max_yplus > 5:
+            logger.info(f"Processing: {data['case_name']}")
+            logger.info(f"   - Iterations:     {data['iterations']}")
+            logger.info(f"   - Pressure Out:   {data['pt_out']:.4f} Pa")
+            logger.info(f"   - Head Loss:      {data['head_loss']:.4f} Pa")
+            logger.info(f"   - Mass Flow Rate: {data['massflow']:.4f} kg/s")
+            logger.info(f"   - Max yPlus:      {data['max_yplus']:.2f}")
+            if data['max_yplus'] > 5:
                 logger.warning("yPlus > 5!")
-            elif max_yplus >= 1:
+            elif data['max_yplus'] >= 1:
                 logger.warning("yPlus between 1 and 5.")
 
             results.setdefault((geom, key), {})[dims] = {
-                "head_loss": head_loss,
-                "massflow":  massflow,
-                "max_yplus": max_yplus,
+                "head_loss": data['head_loss'],
+                "massflow":  data['massflow'],
+                "max_yplus": data['max_yplus'],
             }
+            summary_data.append(data)
 
-            summary_data.append({
-                "geometry": geom,
-                "key": key,
-                "Mb": dims[0],
-                "Mw": dims[1],
-                "head_loss": head_loss,
-                "massflow": massflow,
-                "max_yplus": max_yplus,
-                "case_name": name
-            })
-
-            if plot or write:
-                plot_data(case, name, plot, write, postproc_dir)
-
-        if write:
+        if write and results:
             import pandas as pd
+            postproc_dir.mkdir(parents=True, exist_ok=True)
 
             print("")
-            for (geom, key), data in results.items():
-                Mb_vals = sorted(set(mb for mb, _ in data))
-                Mw_vals = sorted(set(mw for _, mw in data))
+            for (geom, key), data_dict in results.items():
+                Mb_vals = sorted(set(mb for mb, _ in data_dict))
+                Mw_vals = sorted(set(mw for _, mw in data_dict))
                 idx = pd.Index(Mb_vals, name="Mb")
                 cols = pd.Index(Mw_vals, name="Mw")
 
@@ -396,27 +443,22 @@ def main(write: bool = False, plot: bool = False) -> None:
                 df_flow = df_head.copy()
                 df_yplus = df_head.copy()
 
-                for (mb, mw), vals in data.items():
+                for (mb, mw), vals in data_dict.items():
                     df_head.at[mb, mw] = vals["head_loss"]
                     df_flow.at[mb, mw] = vals["massflow"]
                     df_yplus.at[mb, mw] = vals["max_yplus"]
 
-                if geom == "IN":
-                    base = f"{geom}"
-                else:
-                    base = f"{geom}-{key}"
-                
+                base = f"{geom}" if geom == "IN" else f"{geom}-{key}"
                 df_head.to_csv(postproc_dir / f"{base}_head_losses.csv")
                 df_flow.to_csv(postproc_dir / f"{base}_massflow.csv")
                 df_yplus.to_csv(postproc_dir / f"{base}_max_yplus.csv")
-                logger.info(f"Saved CSVs for {base} in {postproc_dir}")
-            
+                logger.info(f"Saved CSVs for {base} in {postproc_dir}")       
+        
         if write and summary_data:
             summary_df = pd.DataFrame(summary_data)
-            summary_df.to_csv(Path("postProcessingOutputs") / "all_cases_summary.csv", index=False)
-            logger.info("Saved all-cases summary to postProcessingOutputs/all_cases_summary.csv")
-
-
+            summary_df.to_csv(postproc_dir/ "all_cases_summary.csv", index=False)
+            logger.info(f"Saved all-cases summary to {postproc_dir}/all_cases_summary.csv")
+    
     print("")
     logger.info("All processing complete.")
     logger.info(f"Total runtime: {time.time() - start_time:.2f} seconds")
