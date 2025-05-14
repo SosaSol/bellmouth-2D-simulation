@@ -218,7 +218,8 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
         run_case "IN" "$straight_fname" "$straight_case_path" "$straight_log_file" "$MESH_SCRIPT_STRAIGHT" "--Mw $Mw $MESH_FLAGS_STRAIGHT"
         ((COUNTER++))
     else
-        echo "[SKIP] Case folder: $straight_fname already exists and OVERWRITE is false" | tee "$straight_log_file"
+        skip_log_file="${straight_log_file%.log}_skipped.log"
+        echo "[SKIP] Case folder: $straight_fname already exists and OVERWRITE is false" | tee "$skip_log_file"
         ((COUNTER++))
     fi
 
@@ -246,7 +247,8 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
             run_case "ELL" "$fname" "$case_path" "$log_file" "$MESH_SCRIPT" "--Mw $Mw --Mb $Mb $MESH_FLAGS"
             ((COUNTER++))
         else
-            echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$log_file"
+            skip_log_file="${log_file%.log}_skipped.log"
+            echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$skip_log_file"
             ((COUNTER++))
         fi
     done
