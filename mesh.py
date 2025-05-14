@@ -1,21 +1,27 @@
-# standard library
+#!/usr/bin/env python3
+# ==============================================================================
+# mesh_advanced_with_bellmouth.py
+#
+# 2D Geometry Generator for a rectangular with bellmouth Inlet
+# -----------------------------------------------------
+# This script generates the 2D geometry for a rectangular inlet,
+# including a bellmouth,
+# The geometry is fully parametric and suitable for advanced mesh generation
+# with boundary layers and refinement zones.
+#
+# Author: Solim Rovera
+# Date:   14-05-2025
+# ==============================================================================
+ 
+# import libraries
 import sys
 import argparse
-from pathlib import Path
-import logging
-import math
 from scipy.optimize import newton
+import gmsh # GMSH library
 
-# third‑party
-import gmsh
-
-# project constants
-MODULE_WIDTH = 240.0e-3  # m
-GAP = 2.5e-3  # m
-
-SAVE_ROOT = Path.cwd()
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s")
+# import config
+from utils.config import *
+from utils.geometry_utils import *
 
 # -----------------------------
 # Parser
@@ -46,51 +52,6 @@ def parse_args():
     parser.add_argument("--nt", type=int, default=10, help="Number of threads for GMSH")
     parser.add_argument("--sd", type=str, default=None, help="Save directory")
     return parser.parse_args()
-
-# -----------------------------
-# Geometry Helper Functions
-# -----------------------------
-def compute_geometry_parameters(
-        Mw: int, Mb: int, Kx: float, Ky: float
-        ) -> tuple[float, float, float, float]:
-    """
-    Compute key geometry parameters based on input multipliers.
-    Returns:
-        Di: inlet width [m]
-        Db: bellmouth reference width [m]
-        a: semi-major axis (half bellmouth width) [m]
-        b: semi-minor axis (half bellmouth height) [m]
-    """
-    # Di and Db are calculated as:
-    Di = Mw * MODULE_WIDTH + (Mw - 1) * GAP  # inlet width in meters
-    Db = Mb * MODULE_WIDTH + (Mb - 1) * GAP  # bellmouth reference width in meters
-
-    # Ensure a >= b for ellipse definition
-    a_raw = Db      # a = 3*Kx*Db
-    b_raw = Ky * Db # b = Ky*Db
-    a = max(a_raw, b_raw)
-    b = min(a_raw, b_raw)
-    return Di, Db, a, b
-
-
-def add_point(x: float, y:float, z:float = 0) -> int:
-    """Add a point in the OCC geometry kernel."""
-    return gmsh.model.occ.addPoint(x, y, z)
-
-
-def add_line(p1:int, p2:int) -> int:
-    """Add a straight line between two points."""
-    return gmsh.model.occ.addLine(p1, p2)
-
-
-def add_circle_arc(p1:int, center:int, p2:int) -> int:
-    """Add a circular arc from p1 to p2 around center."""
-    return gmsh.model.occ.addCircleArc(p1, center, p2)
-
-
-def add_ellipse_arc(p1:int, center:int, major:int, p2:int) -> int:
-    """Add an elliptical arc from p1 to p2 using major axis vector."""
-    return gmsh.model.occ.addEllipseArc(p1, center, major, p2)
 
 # -----------------------------
 # Build 2D Geometry
@@ -433,12 +394,14 @@ def main(Mw:int=12, Mb:int=12, Kx:float=0.33, Ky:float=0.33,
     # Create geometry
     surf, curves, edgePoints = create_geometry(Mw, Mb, Kx, Ky, r, t, L, xmin, ymin, xmax, ymax)
     # Apply boundary layer
-    apply_boundary_layer(curve_tags=curves[2:9], edge_points=edgePoints, x=1.5*L, n_layers=29, y_plus=0.95, U_inf=16)
+    apply_boundary_layer(curve_tags=curves[2:9], edge_points=edgePoints, x=1.5*L, n_layers=29, 
+                         y_plus=0.95, U_inf=16)
     
     # Refine mesh
     Di, Db, a, b = compute_geometry_parameters(Mw, Mb, Kx, Ky)
     logging.info(f"Inlet width Di:        {Di:.3f} m")
     logging.info(f"Inlet half width Di/2: {Di/2:.3f} m")
+    logging.info(f"Bellmouth semi-m axis: {Db:.3f} m")
     logging.info("Refining mesh...")
     refine_mesh(curve_tags=curves[2:9], 
                 xmax=xmax, ymin=ymin, Di=Di, a=a, b=b, L=L,

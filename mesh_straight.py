@@ -1,21 +1,26 @@
-# standard library
+#!/usr/bin/env python3
+# ==============================================================================
+# mesh_advanced_with_bellmouth.py
+#
+# 2D Geometry Generator for a rectangular Inlet
+# -----------------------------------------------------
+# This script generates the 2D geometry for a rectangular straight inlet,
+# The geometry is fully parametric and suitable for advanced mesh generation
+# with boundary layers and refinement zones.
+#
+# Author: Solim Rovera
+# Date:   14-05-2025
+# ==============================================================================
+ 
+# import libraries
 import sys
 import argparse
-from pathlib import Path
-import logging
-import math
 from scipy.optimize import newton
+import gmsh # GMSH library
 
-# third‑party
-import gmsh
-
-# project constants
-MODULE_WIDTH = 240.0e-3  # m
-GAP = 2.5e-3  # m
-
-SAVE_ROOT = Path.cwd()
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s")
+# import config
+from utils.config import *
+from utils.geometry_utils import *
 
 # -----------------------------
 # Parser
@@ -41,29 +46,6 @@ def parse_args():
     parser.add_argument("--nt", type=int, default=10, help="Number of threads for GMSH")
     parser.add_argument("--sd", type=str, default=None, help="Save directory")
     return parser.parse_args()
-
-# -----------------------------
-# Geometry Helper Functions
-# -----------------------------
-def compute_geometry_parameters(Mw: int) -> float:
-    """
-    Compute key geometry parameters based on input multipliers.
-    Returns:
-        Di: inlet width [m]
-    """
-    # Di and Db are calculated as:
-    Di = Mw * MODULE_WIDTH + (Mw - 1) * GAP  # inlet width in meters
-    return Di
-
-
-def add_point(x: float, y:float, z:float = 0) -> int:
-    """Add a point in the OCC geometry kernel."""
-    return gmsh.model.occ.addPoint(x, y, z)
-
-
-def add_line(p1:int, p2:int) -> int:
-    """Add a straight line between two points."""
-    return gmsh.model.occ.addLine(p1, p2)
 
 # -----------------------------
 # Build 2D Geometry
@@ -377,7 +359,8 @@ def main(Mw:int=12, t:float=5e-3, L:float=0.3,
     # Create geometry
     surf, curves, edge_points = create_geometry(Mw, t, L, xmin, ymin, xmax, ymax)
     # Apply boundary layer
-    apply_boundary_layer(curve_tags=curves[2:5], edge_points=edge_points, x=L, n_layers=19, y_plus=0.95, U_inf=16)
+    apply_boundary_layer(curve_tags=curves[2:5], edge_points=edge_points, x=L, n_layers=19,
+                         y_plus=0.95, U_inf=16)
     
     # Refine mesh
     Di = compute_geometry_parameters(Mw)

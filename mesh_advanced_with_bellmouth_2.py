@@ -13,17 +13,8 @@
 # Date:   14-05-2025
 # ==============================================================================
 
-# import all from previous script
+# import setup from previous script
 from mesh_advanced_with_bellmouth import *
-
-# project constants imported from previous script
-# logging setup imported from previous script
-
-# Dimension ellipse 
-a_ell = 70e-3  # m
-
-SAVE_ROOT = Path.cwd()
-
 
 # -----------------------------
 # Build 2D Geometry
@@ -90,11 +81,11 @@ def create_geometry(
         pts.append(add_point(xmax, ymin))            # p2         
         N = (Mw + 1) // 2
         for i in range(N):
-            y1 = H1 * (i+1/2) + GAP2 * i
+            y1 = H1 * (i+1/2) + GAP * i
             y2 = y1 + DELTA_H
-            y4 = y1 + GAP2
+            y4 = y1 + GAP
             y3 = y4 - DELTA_H
-            ye = y1 + GAP2/2
+            ye = y1 + GAP/2
 
             pts.append(add_point(xmax, y2))
             edge_points.append(pts[-1])  # Store edge point for boundary layer
@@ -133,18 +124,18 @@ def create_geometry(
     elif Mw % 2 == 0:
         N = Mw // 2 + 1
         for i in range(N):
-            y1 = H1 * i + GAP2 * (i-1/2)
+            y1 = H1 * i + GAP * (i-1/2)
             y2 = y1 + DELTA_H
-            y4 = y1 + GAP2
+            y4 = y1 + GAP
             y3 = y4 - DELTA_H
-            ye = y1 + GAP2/2
+            ye = y1 + GAP/2
 
             if i == 0:
                 # pts.append(add_point(x1, ymin)) # p2
                 pts.append(add_point(xe, ymin)) # p2
                 edge_points.append(pts[-1])     # Store edge point for boundary layer
                 center_points_coords.append([x1,ye])  # Store center point for arcs
-                y4 = GAP2/2
+                y4 = GAP/2
                 y3 = y4 - DELTA_H
             elif i!= 0:
                 pts.append(add_point(xmax, y2))
