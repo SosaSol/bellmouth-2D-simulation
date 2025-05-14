@@ -1,3 +1,17 @@
+# ==============================================================================
+# mesh_advanced_with_bellmouth.py
+#
+# 2D Geometry Generator for WindShaper "Aeropack" Inlet
+# -----------------------------------------------------
+# This script generates the 2D geometry for the WindShaper Aeropack,
+# including only the bellmouth.
+# The geometry is fully parametric and suitable for advanced mesh generation
+# with boundary layers and refinement zones.
+#
+# Author: Solim Rovera
+# Date:   14-05-2025
+# ==============================================================================
+
 # standard library
 import sys
 import argparse

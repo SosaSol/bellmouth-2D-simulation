@@ -1,3 +1,16 @@
+# ==============================================================================
+# mesh_advanced_no_bellmouth.py
+#
+# 2D Geometry Generator for WindShaper "Standard" Inlet
+# -----------------------------------------------------
+# This script generates the complete 2D geometry for the WindShaper.
+# The geometry is fully parametric and suitable for advanced mesh generation
+# with boundary layers and refinement zones.
+#
+# Author: Solim Rovera
+# Date:   14-05-2025
+# ==============================================================================
+ 
 # standard library
 import sys
 import argparse
