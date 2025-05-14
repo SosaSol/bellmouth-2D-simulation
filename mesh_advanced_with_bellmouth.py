@@ -177,7 +177,10 @@ def create_geometry(
         t_end = t_22
     elif Mw <= 12:
         t_end = t_44
-
+    else:
+        # raise an error saying that the thickness is not defined for this number of modules
+        raise ValueError(f"t_end not defined for {Mw} modules.")
+    
     # If Mw odd
     if Mw % 2 == 1:
         pts.append(add_point(xmax, ymin))            # p2         
@@ -281,7 +284,7 @@ def create_geometry(
     for i in range(len(pts)-1 - 11):
         curve_tags.append(add_line(pts[i], pts[i+1]))
     
-    # ellipse arcs
+    # bellmouth ellipse arcs
     curve_tags.append(add_ellipse_arc(pts[-12], ell_center, pts[-12], pts[-11]))
     curve_tags.append(add_circle_arc (pts[-11], circ_center,  pts[-10]))
     curve_tags.append(add_circle_arc (pts[-10], circ_center2, pts[-9]))

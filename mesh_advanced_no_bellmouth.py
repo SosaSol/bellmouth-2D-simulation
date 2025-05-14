@@ -140,6 +140,9 @@ def create_geometry(
         t_end = t_22
     elif Mw <= 12:
         t_end = t_44
+    else:
+        # raise an error saying that the thickness is not defined for this number of modules
+        raise ValueError(f"t_end not defined for {Mw} modules.")
 
     # If Mw odd
     if Mw % 2 == 1:
