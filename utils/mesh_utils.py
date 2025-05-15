@@ -1,6 +1,9 @@
 from utils.config import *
 import gmsh
 from scipy.optimize import newton
+from pathlib import Path
+import math
+import logging
 
 # -----------------------------
 # Boundary Layer
@@ -20,6 +23,7 @@ def boundaryLayerParameters(U_inf:float, nu:float=15.06e-6, x:float=0.3, y_plus:
     
     Returns:
     - y1: Height of the first cell [m]
+    - delta99: Boundary layer thickness [m]
     - expansion_ratio: Growth ratio between layers
     """
         
@@ -253,7 +257,7 @@ def extrude_and_group(surface:int, wall_curve_tags:list):
 # -----------------------------
 # Save Mesh
 # -----------------------------
-def save_mesh(fname:str , save_path: Path):
+def save_mesh(fname:str , save_path:Path):
     """
     Save the generated mesh to a file.
     """
