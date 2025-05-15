@@ -1,114 +1,136 @@
 # Bellmouth 2D Simulation
 
-This repository contains a parametric study of bellmouth inlet geometries in a 2D computational fluid dynamics (CFD) simulation using OpenFOAM. It automates the generation of geometry, meshing, simulation execution, and post-processing to investigate the aerodynamic performance of different bellmouth shapes.
+This repository provides a fully automated workflow for parametric CFD studies of 2D bellmouth inlet geometries using OpenFOAM and Gmsh. The project enables users to generate, mesh, simulate, and post-process multiple bellmouth configurations efficiently, supporting rapid design exploration and analysis.
 
 ---
-
-## Acknowledgements
-
-The WindShape team for context and application guidance
 
 ## Table of Contents
 
-- [About the Project](#about-the-project)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
-- [Examples](#examples)
 - [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
+- [References](#references)
 
 ---
 
-## About the Project
+## Overview
 
-Bellmouths are often used at the inlet of wind tunnels and ducts to smooth the airflow and reduce pressure losses. This project provides a framework to evaluate the effect of different bellmouth geometries on flow characteristics in 2D using OpenFOAM and Gmsh.
+Bellmouth inlets are critical for minimizing pressure losses and ensuring smooth airflow in wind tunnels and duct systems. This project automates the process of evaluating how different 2D bellmouth shapes affect flow characteristics such as pressure drop and velocity distribution.
 
-The project performs a sweep over several geometric parameters, generating and simulating multiple configurations in an automated pipeline. The goal is to help determine the influence of shape on pressure drop and velocity distribution.
+The workflow includes:
 
-Key features include:
-
-- Parametric geometry and mesh generation using Gmsh and Python
-- WSL-based automation for OpenFOAM from a Windows host
-- Post-processing with integrated pressure and velocity data extraction
-- Logging and reproducibility built-in for all runs
+- Parametric geometry and mesh generation with Gmsh (via Python)
+- Automated OpenFOAM case setup and execution in WSL
+- Post-processing for extracting and logging key aerodynamic metrics
 
 ---
 
-## Getting Started
+## Features
 
-### Prerequisites
+- **Parametric Study:** Easily configure and sweep geometric parameters for bellmouth shapes.
+- **Automated Pipeline:** One-command execution for geometry, meshing, simulation, and post-processing.
+- **Cross-Platform:** Designed for Windows hosts using WSL for Linux-based OpenFOAM.
+- **Reproducibility:** All runs are logged with configuration and results for traceability.
+- **Extensible:** Modular Python scripts for geometry, simulation control, and data extraction.
 
+---
+
+## Requirements
+
+- Windows 10/11 with [WSL](https://docs.microsoft.com/en-us/windows/wsl/) (Ubuntu recommended)
 - [Python ≥ 3.8](https://www.python.org/downloads/)
-- [OpenFOAM v2412](https://openfoam.org/)
-- [Gmsh](https://gmsh.info/)
-- [WSL (Windows Subsystem for Linux)](https://docs.microsoft.com/en-us/windows/wsl/)
+- [OpenFOAM v2412](https://openfoam.org/) (installed in WSL)
+- [Gmsh](https://gmsh.info/) (installed in WSL)
 - Bash shell (via WSL)
-- Optional: [Anaconda/Miniconda](https://docs.conda.io/en/latest/) for environment management
-- libglu1-mesa \
-- libxft2 \
+- Optional: [Anaconda/Miniconda](https://docs.conda.io/en/latest/) for Python environment management
+- Additional Linux packages: `libglu1-mesa`, `libxft2`
 
-### Installation
+---
 
-1. Clone the repository:
+## Installation
+
+1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/yourusername/bellmouth-2d-simulation.git
+   git clone https://github.com/SosaSol/bellmouth-2d-simulation.git
    cd bellmouth-2d-simulation
    ```
 
-2. Set up a Python environment (optional but recommended):
+2. **Set up Python environment (optional but recommended):**
 
    ```bash
-   conda create -n windshape python=3.10
-   conda activate windshape
+   conda create -n bellmouth python=3.10
+   conda activate bellmouth
    ```
 
-3. Install dependencies:
+3. **Install Python dependencies:**
 
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Confirm OpenFOAM is installed and available in WSL:
+4. **Install OpenFOAM and Gmsh in WSL:**
+   - Follow [OpenFOAM installation guide](https://openfoam.org/download/)
+   - Install Gmsh: `sudo apt install gmsh`
+   - Install required libraries: `sudo apt install libglu1-mesa libxft2`
 
-   ```bash
-   wsl
-   source /usr/lib/openfoam/openfoam2412/etc/bashrc
-   simpleFoam -help
-   ```
+---
 
 ## Usage
 
-From Windows terminal (PowerShell or CMD), run:
+1. **Configure parameters:**  
+   Edit `utils/config.py` to set geometric parameter ranges and simulation options.  
+   Additionally, use `run_all.sh` to configure specific geometry settings and define parameter sweep options before running the workflow.
 
-```bash
-python run.py
-```
+2. **Run the workflow from wsl terminal:**
 
-This script will:
+   ```bash
+   chmod +x run_all.sh
+   ./run_all.sh
+   ```
 
-- Generate geometry and mesh using Gmsh
-- Copy and set up OpenFOAM case directories
-- Run mesh conversion, simulation, and post-processing within WSL
-- Log outputs and simulation results for later analysis
+   This will:
 
-You can customize geometric parameters and loop ranges in run.py.
+   - Generate geometry and mesh for each configuration
+   - Set up and run OpenFOAM simulations
+   - Post-process results and save logs/outputs
+
+3. **Results:**  
+   Output data and logs are saved in the `outputs/` directory for analysis.
 
 ---
 
 ## Project Structure
 
-```php
+```text
 bellmouth-2d-simulation/
-├── mesh.py              # Gmsh geometry and mesh generator
-├── run.py               # Main control script (simulation + post-processing)
-├── ELL-case-template/        # OpenFOAM case template
-├── outputs/                  # Optional directory for results
-├── requirements.txt
+├── mesh.py                          # Meshing script for parametric and curved bellmouth geometries
+├── mesh_straight.py                 # Meshing script for straight inlet geometries
+├── mesh_advanced_no_bellmouth.py    # Meshing script for cases without bellmouth features
+├── mesh_advanced_with_bellmouth.py  # Advanced meshing for curved bellmouth inlets
+├── mesh_aeropack.py                 # Meshing for aerodynamic package configurations
+├── utils/
+│   ├── config.py                    # Parameter configuration for geometry and simulation
+│   ├── geometry.py                  # Parametric geometry generation functions
+│   ├── meshing.py                   # Mesh generation utilities using Gmsh
+│   └── ...                          # Additional utility scripts
+├── tests/
+│   └── ...
+├── ELL-case-template/               # OpenFOAM case template directory
+├── outputs/                         # Simulation results and logs
+├── postProcessingOutputs/           # Post-processed results (plots, processed data)
+├── plotResiduals.py                 # Plotting simulation residuals
+├── plotLiveResiduals.py             # Compare results across simulation cases
+├── run_all.sh                       # Automates the full workflow
+├── clean_all.sh                     # Cleans project folders and outputs
+├── requirements.txt                 # Python dependencies
+├── updateBoundaryConditions.py      # Modify OpenFOAM boundary conditions
 └── README.md
 ```
 
@@ -116,35 +138,36 @@ bellmouth-2d-simulation/
 
 ## Contributing
 
-Contributions are welcome! To propose a change:
+Contributions are welcome!  
+To propose changes:
 
 1. Fork the repository
-2. Create a new branch (`git checkout -b feature/new-feature`)
-3. Commit your changes (`git commit -m 'Add new feature'`)
-4. Push to the branch (`git push origin feature/new-feature`)
-5. Open a Pull Request
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit and push your changes
+4. Open a Pull Request
 
-Please ensure code adheres to project conventions and is thoroughly tested.
+Please follow project conventions and test your code.
 
 ---
 
 ## License
 
-This project is licensed under SOLIM's LICENSE
+This project is licensed under SOLIM's LICENSE. See `LICENSE` file for details.
 
 ---
 
-## Additional
+## Acknowledgements
 
-#### Screenshots and GIFs
-
-- Mesh and boundary conditions
-- Results
-- Saving data
+- Tony G.
+- Aurélien W.
+- Sergio M.
+- The whole WindShape team for project context and application guidance
 
 ---
 
-#### Documentation
+## References
 
-- [GMSH guide](https://gmsh.info/doc/texinfo/gmsh.html)
-- [GMSH Python API](https://gitlab.onelab.info/gmsh/gmsh/blob/gmsh_4_13_1/api/gmsh.py)
+- [Gmsh Documentation](https://gmsh.info/doc/texinfo/gmsh.html)
+- [Gmsh Python API](https://gitlab.onelab.info/gmsh/gmsh/blob/gmsh_4_13_1/api/gmsh.py)
+- [OpenFOAM User Guide](https://cfd.direct/openfoam/user-guide/)
+- [WSL Documentation](https://docs.microsoft.com/en-us/windows/wsl/)
