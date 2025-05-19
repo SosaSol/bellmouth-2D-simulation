@@ -293,7 +293,7 @@ def main(Mw:int, Mb:int, Kx:float, Ky:float,
     """
 
     # Define name and path for mesh file
-    fname = f"ELL-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(t*1e3)}-{int(r*1e3)}"
+    fname = f"AP-{Mw}-{Mb}-{int(Kx*100)}-{int(Ky*100)}-{int(t*1e3)}-{int(r*1e3)}"
     save_path = Path(sd) if sd else Path("outputs/meshes")
     # logging.info(f"Save path: {save_path}")
     
@@ -339,8 +339,8 @@ def main(Mw:int, Mb:int, Kx:float, Ky:float,
     logging.info("Extruding and defining physical groups...")
     extrude_and_group(surface=surf,wall_curve_tags=wall_curve_tags)
 
-    if '-nopopup' not in sys.argv:
-        gmsh.fltk.run()
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
 
     # Generate 3D mesh and save
     gmsh.model.mesh.generate(3)
@@ -349,8 +349,8 @@ def main(Mw:int, Mb:int, Kx:float, Ky:float,
     logging.info("Saving mesh...")
     save_mesh(fname, save_path=save_path)
 
-    if '-nopopup' not in sys.argv:
-        gmsh.fltk.run()
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
 
     logging.info("Mesh generation complete. Finalizing GMSH...")
     gmsh.finalize()

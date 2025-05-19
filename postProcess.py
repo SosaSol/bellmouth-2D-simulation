@@ -501,7 +501,7 @@ def main(write: bool = False, plot: bool = False) -> None:
             logger.info(f"   - Iterations:     {data['iterations']}")
             logger.info(f"   - Pressure Out:   {data['pt_out']:.4f} Pa/m")
             logger.info(f"   - Head Loss:      {data['head_loss']:.4f} Pa/m")
-            logger.info(f"   - Mass Flow Rate: {data['massflow']:.4f} kg/s")
+            logger.info(f"   - Mass Flow Rate: {data['massflow']:.4f} kg/s/m")
             logger.info(f"   - Max yPlus:      {data['max_yplus']:.2f}")
             if data['max_yplus'] > 5:
                 logger.warning("yPlus > 5!")
