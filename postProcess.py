@@ -216,6 +216,7 @@ def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float
         y_plus  = read_value_from_last_line(files['y_plus'], -2)
         return int(it), pout, (pin - pout), mrate, y_plus
     except Exception as e:
+        print("")
         logger.error(f"Failed to extract data from {case_dir.name}")
         traceback.print_exc()
         return None
@@ -346,6 +347,7 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
             - "ELL-<Mw>-<Mb>-<Kx>-<Ky>-<t>-<r>"
             - "IN-<Mw>"
             - "RAD-<Mw>-<Mb>-<K>-<t>"
+            - "AP-<Mw>-<Mb>-<Kx>-<Ky>-<t>-<r>"
 
     Returns:
         Tuple[Optional[str], Optional[str], Optional[Tuple[int, int]]]:
@@ -368,6 +370,9 @@ def parse_case_name(name: str) -> Tuple[Optional[str], Optional[str], Optional[T
         elif name.startswith("RAD-"):
             _, Mw, Mb, K, t = parts
             return "RAD", f"{K}-{t}", (int(Mb), int(Mw))
+        elif name.startswith("AP-"):
+            _, Mw, Mb, Kx, Ky, t, r = parts
+            return "AP", f"{Kx}-{Ky}-{t}-{r}", (int(Mb), int(Mw))
     except ValueError:
         pass
     return None, None, None
