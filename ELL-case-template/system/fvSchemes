@@ -21,43 +21,39 @@ ddtSchemes
 
 gradSchemes
 {
-    // default         Gauss linear;
     // If you get residual "bumpiness" or instability near sharp curvature or boundaries, you can experiment with:
-    default         cellLimited Gauss linear 1;
-    // GPT suggestions:
-    // grad(p)         faceMDLimited Gauss linear 1; // Fixes checkerboarding 
-    // https://www.openfoam.com/documentation/guides/v2112/api/classFoam_1_1fv_1_1faceMDLimitedGrad.html
-    // grad(U)         Gauss linear;
+    default         cellMDLimited Gauss linear 0; // Gradient limiter (not too diffusive)
+    grad(U)         cellMDLimited Gauss linear 0.333; // slope limiter  
+    grad(p)         Gauss linear 0.333; // WolfDynamics reccommendation
+    // PotentialFoam
+    grad(phi)      Gauss linear;
 }
 
 divSchemes
 {
-    default         none;   // OK
-
-    div(phi,U)      bounded Gauss LUST grad(U); // Stable, higher-order
-
-    turbulence      bounded Gauss limitedLinear 1; // OK
-    div(phi,k)      $turbulence;
-    div(phi,epsilon) $turbulence;
-    div(phi,omega)  $turbulence;
-
-    div((nuEff*dev2(T(grad(U))))) Gauss linear; // OK
+    // Accurate but oscillatory scheme, second-order accurate
+    div(phi,U)                      Gauss linear; 
+    div(phi,k)                      Gauss limitedLinear 1;
+    div(phi,omega)                  Gauss limitedLinear 1;
+    div((nuEff*dev2(T(grad(U)))))   Gauss linear; 
+    // PotentialFoam
+    div(div(phi,U)) Gauss linear;
 }
 
 laplacianSchemes
 {
-    default         Gauss linear corrected; // Handles mesh non-orthogonality
+    default         Gauss linear limited 1.0; // Accurate on orthogonal meshes (<70 deg)  w/ non-orthogonal correction
+}
+
+snGradSchemes
+{
+    default         limited 1.0;      // Accurate on orthogonal meshes (<70 deg)  w/ non-orthogonal correction
 }
 
 interpolationSchemes
 {
     default         linear;
     // default         limitedLinear 1;         // Smoother transitions, more stable
-}
-
-snGradSchemes
-{
-    default         corrected; // OK
 }
 
 wallDist

@@ -20,23 +20,22 @@ solvers
     p
     {
         solver          GAMG;
-        smoother        DICGaussSeidel;
+        smoother        GaussSeidel;
         tolerance       1e-6;
         relTol          0.05;
         minIter         3;
         maxIter         100;
-        // GPT suggestions
-        // nPreSweeps      0;
-        // nPostSweeps     2;
     }
 
     U
     {
-        solver          smoothSolver;
+        type            coupled;
+        solver          PBiCCCG;
+        preconditioner  DILU;
         smoother        symGaussSeidel;
-        tolerance       1e-8;
-        relTol          0.0;
-        minIter         1;
+        tolerance       (1e-8 1e-8 1e-8);
+        relTol          (0.0 0.0 0.0);
+        minIter         3;
         maxIter         100;
     }
     
@@ -46,7 +45,7 @@ solvers
         smoother        GaussSeidel;
         tolerance       1e-8;
         relTol          0.05;
-        minIter         1;
+        minIter         3;
         maxIter         100;
     }
 
@@ -56,21 +55,35 @@ solvers
         smoother        GaussSeidel;
         tolerance       1e-8;
         relTol          0.05;
-        minIter         1;
+        minIter         3;
         maxIter         100;
+    }
+    
+    // PotentialFoam
+    Phi
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-8;
+        relTol          0.05;
+        minIter         3;
     }
 }
 
 SIMPLE
 {
-    nNonOrthogonalCorrectors 2;
-    consistent      yes;
+    momentumPredictor           yes; // yes for high Re flows where convection dominates
+    nOuterCorrectors            1;   // ?? improves stability of second order time discretization schemes
+    nCorrector                  3;   // improves accuracy and stabilty
+    nNonOrthogonalCorrectors    1;   // 1 for meshes with non-orthogonality < 60 deg
+    consistent                  yes; // to use SIMPLEC
 
     residualControl
     {
         p               1e-4;
         U               1e-6;
         "(k|omega)"     1e-6;
+        Phi             1e-6;
     }
 }
 
@@ -78,15 +91,18 @@ relaxationFactors
 {
     equations
     {
-        U               0.7; // 0.9;
-        p               0.9;
-        ".*"            0.8; // 0.8;
+        // Industry standard for SIMPLE
+        p               0.3;
+        U               0.7;
+        k               0.7;
+        omega           0.7;
+        Phi             0.7; // PotentialFoam
     }
 }
 
 potentialFlow
 {
-    nNonOrthogonalCorrectors 2;
+    nNonOrthogonalCorrectors 5;
 }
 
 
