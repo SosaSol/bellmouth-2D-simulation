@@ -22,9 +22,9 @@ ddtSchemes
 gradSchemes
 {
     // If you get residual "bumpiness" or instability near sharp curvature or boundaries, you can experiment with:
-    default         cellMDLimited Gauss linear 0; // Gradient limiter (not too diffusive)
-    grad(U)         cellMDLimited Gauss linear 0.333; // slope limiter  
-    grad(p)         Gauss linear 0.333; // WolfDynamics reccommendation
+    default         cellMDLimited Gauss linear 0;       // Gradient limiter (not too diffusive)
+    grad(U)         cellMDLimited Gauss linear 0.333;   // slope limiter  
+    grad(p)         Gauss linear 0.333;                 // WolfDynamics reccommendation
     // PotentialFoam
     grad(phi)      Gauss linear;
 }
@@ -53,7 +53,7 @@ snGradSchemes
 interpolationSchemes
 {
     default         linear;
-    // default         limitedLinear 1;         // Smoother transitions, more stable
+    // default         limitedLinear 1; // Smoother transitions, more stable
 }
 
 wallDist
