@@ -33,6 +33,12 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s]\t%(message)s')
 logger = logging.getLogger(__name__)
 logging.addLevelName(logging.WARNING, "WARN")   # Override the default 'WARNING' level name
 
+# Add this block to also log to a file:
+file_handler = logging.FileHandler('postProcess.log', mode='w')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('[%(levelname)s]\t%(message)s'))
+logger.addHandler(file_handler)
+
 start_time = time.time()
 
 # ────────────────────────────────
@@ -216,7 +222,7 @@ def extract_case_data(case_dir: Path) -> Optional[Tuple[int, float, float, float
         y_plus  = read_value_from_last_line(files['y_plus'], -2)
         return int(it), pout, (pin - pout), mrate, y_plus
     except Exception as e:
-        print("")
+        logger.info("")
         logger.error(f"Failed to extract data from {case_dir.name}")
         traceback.print_exc()
         return None
@@ -417,7 +423,7 @@ def process_single_case(case: Path, postproc_dir: Path, plot: bool, write: bool)
     geom, key, dims = parse_case_name(name)
 
     if not geom:
-        print("")
+        logger.info("")
         logger.warning(f"Skipping unknown format: {name}")
         return None
     data = extract_case_data(case)
@@ -485,10 +491,10 @@ def main(write: bool = False, plot: bool = False) -> None:
         
         cases = sorted([p for p in output_dir.iterdir() if p.is_dir()], key=natural_key)
         if not cases:
-            print("")
+            logger.info("")
             logger.info(f"No cases found in {output_dir}")
             continue
-        print("")
+        logger.info("")
         logger.info(f">>> Processing '{subdir.name}' with {len(cases)} cases")
 
         results: Dict[Tuple[str, str], Dict[Tuple[int, int], Dict[str, float]]] = {}
@@ -501,7 +507,7 @@ def main(write: bool = False, plot: bool = False) -> None:
                     continue
             (geom, key), dims, data = single_case_output
 
-            print("")
+            logger.info("")
             logger.info(f"Processing: {data['case_name']}")
             logger.info(f"   - Iterations:     {data['iterations']}")
             logger.info(f"   - Pressure Out:   {data['pt_out']:.4f} Pa/m")
@@ -524,7 +530,7 @@ def main(write: bool = False, plot: bool = False) -> None:
             import pandas as pd
             postproc_dir.mkdir(parents=True, exist_ok=True)
 
-            print("")
+            logger.info("")
             for (geom, key), data_dict in results.items():
                 Mb_vals = sorted(set(mb for mb, _ in data_dict))
                 Mw_vals = sorted(set(mw for _, mw in data_dict))
@@ -551,7 +557,7 @@ def main(write: bool = False, plot: bool = False) -> None:
             summary_df.to_csv(postproc_dir/ "all_cases_summary.csv", index=False)
             logger.info(f"Saved all-cases summary to {postproc_dir}/all_cases_summary.csv")
     
-    print("")
+    logger.info("")
     logger.info("All processing complete.")
     logger.info(f"Total runtime: {time.time() - start_time:.2f} seconds")
 
