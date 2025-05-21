@@ -10,6 +10,7 @@ RUN_MODE="serial"
 NP=12
 OVERWRITE=false
 ADVANCED=false
+AEROPACK=false
 
 # ---------------------- Parse Named Arguments ----------------------
 while [[ $# -gt 0 ]]; do
@@ -24,14 +25,9 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
-        --overwrite)
-            OVERWRITE=true
-            shift
-            ;;
-        --advanced)
-            ADVANCED=true
-            shift
-            ;;
+        --overwrite) OVERWRITE=true; shift ;;
+        --advanced) ADVANCED=true; shift ;;
+        --aeropack) ADVANCED=true; AEROPACK=true; shift ;;
         --help|-h)
             echo "Usage: $0 [--parallel N] [--overwrite] [--advanced]"
             exit 0
@@ -57,7 +53,7 @@ fi
 
 # ---------------------- Constants ----------------------
 Kx=0.33; Ky=0.33
-r=0.050
+r=0.100
 
 L1=0.16866  # m
 L2=0.13029  # m
@@ -65,7 +61,8 @@ L3=0.03986  # m
 L=$(awk "BEGIN {print $L1 + $L2 + $L3}")  # m
 
 GAP2=0.04256  # m
-t=$(awk "BEGIN {print $GAP2 / 2}")  # m
+t_end=$(awk "BEGIN {print $GAP2 / 2}")  # m
+t=0.010  # m
 
 xmin=0.0; ymin=0.0
 xmax=25.0; ymax=25.0
@@ -73,7 +70,99 @@ xmax=25.0; ymax=25.0
 nt=$NP
 
 MW_START=2; MW_END=12
-MB_START=2; MB_END=12
+MB_START=2; MB_END=6 # limit the ellipse width at 1.5m
+
+# ---------------------- Functions ----------------------
+
+# Function to run a single simulation case
+# Arguments:
+#   $1 - Case type (e.g., "IN", "ELL")
+#   $2 - Case name
+#   $3 - Path to the case directory
+#   $4 - Log file path
+#   $5 - Mesh generation script to use
+#   $6 - Mesh generation arguments
+run_case() {
+    local case_name="$1"
+    local case_path="$2"
+    local log_file="$3"
+    local mesh_script="$4"
+    local mesh_args="$5"
+
+    {
+        echo "=================================================="
+        echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $case_name"
+        echo "[INFO] Start: $(date)"
+        echo "=================================================="
+
+        local start_time=$(date +%s)
+
+        if [ -d "$case_path" ]; then
+            echo "[INFO] Overwriting existing case"
+            rm -rf "$case_path"
+        else
+            echo "[INFO] Creating new case from template"
+        fi
+        cp -r "$CASE_TEMPLATE" "$case_path"
+        chmod +x "${case_path}/Allrun"
+
+        generate_mesh "$case_path" "$case_name" "$mesh_script" "$mesh_args"
+        run_simulation "$case_path"
+
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        
+        printf "[DONE] Case finished: %s (Duration: %02d:%02d:%02d)\n" \
+            "$case_name" $((duration / 3600)) $(((duration % 3600) / 60)) $((duration % 60))
+
+        echo "[INFO] End: $(date)"
+        echo
+    } 2>&1 | tee "$log_file"
+}
+
+# Function to generate a single mesh
+# Arguments:
+#   $1 - Path to the case directory
+#   $2 - Case name
+#   $3 - Mesh generation script to use
+#   $4 - Mesh generation arguments
+generate_mesh() {
+    local case_path="$1"
+    local case_name="$2"
+    local mesh_script="$3"
+    local mesh_args="$4"
+
+    local msh_file="${case_path}/constant/triSurface/${case_name}.msh"
+    if [ -f "$msh_file" ]; then
+        echo "[SKIP] Mesh already exists for $case_name"
+    else
+        local save_dir="${case_path}/constant/triSurface"
+        echo "[INFO] Generating mesh using $mesh_script..."
+        python3 "$SCRIPT_DIR/$mesh_script" $mesh_args --sd "$save_dir"
+    fi
+}
+
+# Function to run a single simulation
+# Arguments:
+#   $1 - Path to the case directory
+run_simulation() {
+    local case_path="$1"
+    echo "[INFO] Running OpenFOAM simulation..."
+
+    # Check if the Allrun script exists and is executable
+    if [ ! -x "${case_path}/Allrun" ]; then
+        echo "[ERROR] Allrun script is missing or not executable in $case_path"
+        exit 1
+    fi
+
+    pushd "$case_path" > /dev/null
+    if [[ "$RUN_MODE" == "parallel" ]]; then
+        ./Allrun parallel "$NP"
+    else
+        ./Allrun
+    fi
+    popd > /dev/null
+}
 
 # ---------------------- Check Dependencies ----------------------
 
@@ -85,11 +174,15 @@ if [ ! -d "$CASE_TEMPLATE" ]; then
 fi
 
 if [ "$ADVANCED" == true ]; then
+    if [ "$AEROPACK" == true ]; then
+        MESH_SCRIPT="mesh_aeropack.py"
+    else
+        MESH_SCRIPT="mesh_advanced_with_bellmouth.py"
+    fi
     OUTPUT_DIR="${SCRIPT_DIR}/outputs/advanced"
     LOG_DIR="${SCRIPT_DIR}/logs/advanced"
-    MESH_SCRIPT="mesh_advanced_with_bellmouth.py"
     MESH_SCRIPT_STRAIGHT="mesh_advanced_no_bellmouth.py"
-    MESH_FLAGS="--Kx $Kx --Ky $Ky --r $r --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
+    MESH_FLAGS="--Kx $Kx --Ky $Ky --t $t --r $r --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
     MESH_FLAGS_STRAIGHT="--xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
 else
     OUTPUT_DIR="${SCRIPT_DIR}/outputs/simple"
@@ -98,6 +191,13 @@ else
     MESH_SCRIPT_STRAIGHT="mesh_straight.py"
     MESH_FLAGS="--Kx $Kx --Ky $Ky --r $r --t $t --L $L --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
     MESH_FLAGS_STRAIGHT="--t $t --L $L --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
+fi
+
+# Set ELL/AP prefix for advanced/aeropack
+if [ "$AEROPACK" == true ]; then
+    ELL_PREFIX="AP"
+else
+    ELL_PREFIX="ELL"
 fi
 
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
@@ -114,119 +214,49 @@ echo
 
 # ---------------------- Main Loop ----------------------
 for Mw in $(seq "$MW_END" -1 "$MW_START"); do
+    # Straight case (IN-...)
+    straight_fname=$(printf "IN-%d" "$Mw" )
 
-    fname=$(printf "IN-%d-%d-%d" \
-        "$Mw" \
-        "$(awk "BEGIN{print int($L * 1000)}")" \
-        "$(awk "BEGIN{print int($t * 1000)}")")
+    straight_case_path="${OUTPUT_DIR}/${straight_fname}"
+    straight_log_file="${LOG_DIR}/${straight_fname}.log"
 
-    case_path="${OUTPUT_DIR}/${fname}"
-    log_file="${LOG_DIR}/${fname}.log"
-
-    if [ -d "$case_path" ] && [ "$OVERWRITE" != "true" ]; then
-        echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$log_file"
+    if [ ! -d "$straight_case_path" ] || [ "$OVERWRITE" == "true" ]; then
+        run_case "$straight_fname" "$straight_case_path" "$straight_log_file" "$MESH_SCRIPT_STRAIGHT" "--Mw $Mw $MESH_FLAGS_STRAIGHT"
         ((COUNTER++))
-        continue
+    else
+        skip_log_file="${straight_log_file%.log}_skipped.log"
+        echo "[SKIP] Case folder: $straight_fname already exists and OVERWRITE is false" | tee "$skip_log_file"
+        ((COUNTER++))
     fi
 
-    {
-        echo "=================================================="
-        echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $fname"
-        echo "[INFO] Start: $(date)"
-        echo "=================================================="
-
-        if [ -d "$case_path" ]; then
-            echo "[INFO] Overwriting existing case"
-            rm -rf "$case_path"
-        else
-            echo "[INFO] Creating new case from template"
-        fi
-        cp -r "$CASE_TEMPLATE" "$case_path"
-        chmod +x "${case_path}/Allrun"
-
-        msh_file="${case_path}/constant/triSurface/${fname}.msh"
-        if [ -f "$msh_file" ]; then
-            echo "[SKIP] Mesh already exists for $fname"
-        else
-            save_dir="${case_path}/constant/triSurface"
-            echo "[INFO] Generating mesh using $MESH_SCRIPT..."
-            python3 "$SCRIPT_DIR/$MESH_SCRIPT_STRAIGHT" --Mw $Mw $MESH_FLAGS_STRAIGHT --sd "$save_dir"
-        fi
-
-        echo "[INFO] Running OpenFOAM simulation..."
-        pushd "$case_path" > /dev/null
-        if [[ "$RUN_MODE" == "parallel" ]]; then
-            ./Allrun parallel "$NP"
-        else
-            ./Allrun
-        fi
-        popd > /dev/null
-
-        echo "[DONE] Case finished: $fname"
-        echo "[INFO] End: $(date)"
-        echo
-    } 2>&1 | tee "$log_file"
-
-    ((COUNTER++))
-
+    # Mb loop (ELL-... or AP-...)
     for Mb in $(seq "$MB_END" -1 "$MB_START"); do
 
-        fname=$(printf "ELL-%d-%d-%d-%d-%d-%d-%d" \
-            "$Mw" "$Mb" \
+        # # Skip if Mw<=3 and Mb>5
+        # if [ "$Mw" -le 3 ] && [ "$Mb" -gt 3 ]; then
+        #     echo "[SKIP] Mw <= 3 and Mb > 5, skipping case Mw=$Mw, Mb=$Mb"
+        #     continue
+        # fi
+
+        fname=$(printf "%s-%d-%d-%d-%d-%d-%d" \
+            "$ELL_PREFIX" "$Mw" "$Mb" \
             "$(awk "BEGIN{print int($Kx * 100)}")" \
             "$(awk "BEGIN{print int($Ky * 100)}")" \
-            "$(awk "BEGIN{print int($r * 1000)}")" \
-            "$(awk "BEGIN{print int($L * 1000)}")" \
-            "$(awk "BEGIN{print int($t * 1000)}")")
+            "$(awk "BEGIN{print int($t * 1000)}")" \
+            "$(awk "BEGIN{print int($r * 1000)}")")
+
 
         case_path="${OUTPUT_DIR}/${fname}"
         log_file="${LOG_DIR}/${fname}.log"
 
-        if [ -d "$case_path" ] && [ "$OVERWRITE" != "true" ]; then
-            echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$log_file"
+        if [ ! -d "$case_path" ] || [ "$OVERWRITE" == "true" ]; then
+            run_case "$fname" "$case_path" "$log_file" "$MESH_SCRIPT" "--Mw $Mw --Mb $Mb $MESH_FLAGS"
             ((COUNTER++))
-            continue
+        else
+            skip_log_file="${log_file%.log}_skipped.log"
+            echo "[SKIP] Case folder: $fname already exists and OVERWRITE is false" | tee "$skip_log_file"
+            ((COUNTER++))
         fi
-
-        {
-            echo "=================================================="
-            echo "[INFO] Case ${COUNTER}/${TOTAL_ITER}: $fname"
-            echo "[INFO] Start: $(date)"
-            echo "=================================================="
-
-            if [ -d "$case_path" ]; then
-                echo "[INFO] Overwriting existing case"
-                rm -rf "$case_path"
-            else
-                echo "[INFO] Creating new case from template"
-            fi
-            cp -r "$CASE_TEMPLATE" "$case_path"
-            chmod +x "${case_path}/Allrun"
-
-            msh_file="${case_path}/constant/triSurface/${fname}.msh"
-            if [ -f "$msh_file" ]; then
-                echo "[SKIP] Mesh already exists for $fname"
-            else
-                save_dir="${case_path}/constant/triSurface"
-                echo "[INFO] Generating mesh using $MESH_SCRIPT..."
-                python3 "$SCRIPT_DIR/$MESH_SCRIPT" --Mw $Mw --Mb $Mb $MESH_FLAGS --sd "$save_dir"
-            fi
-
-            echo "[INFO] Running OpenFOAM simulation..."
-            pushd "$case_path" > /dev/null
-            if [[ "$RUN_MODE" == "parallel" ]]; then
-                ./Allrun parallel "$NP"
-            else
-                ./Allrun
-            fi
-            popd > /dev/null
-
-            echo "[DONE] Case finished: $fname"
-            echo "[INFO] End: $(date)"
-            echo
-        } 2>&1 | tee "$log_file"
-
-        ((COUNTER++))
     done
 done
 

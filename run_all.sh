@@ -10,6 +10,7 @@ RUN_MODE="serial"
 NP=12
 OVERWRITE=false
 ADVANCED=false
+AEROPACK=false
 
 # ---------------------- Parse Named Arguments ----------------------
 while [[ $# -gt 0 ]]; do
@@ -24,14 +25,9 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
-        --overwrite)
-            OVERWRITE=true
-            shift
-            ;;
-        --advanced)
-            ADVANCED=true
-            shift
-            ;;
+        --overwrite) OVERWRITE=true; shift ;;
+        --advanced) ADVANCED=true; shift ;;
+        --aeropack) ADVANCED=true; AEROPACK=true; shift ;;
         --help|-h)
             echo "Usage: $0 [--parallel N] [--overwrite] [--advanced]"
             exit 0
@@ -87,12 +83,11 @@ MB_START=2; MB_END=6 # limit the ellipse width at 1.5m
 #   $5 - Mesh generation script to use
 #   $6 - Mesh generation arguments
 run_case() {
-    local case_type="$1"  # "IN" or "ELL"
-    local case_name="$2"
-    local case_path="$3"
-    local log_file="$4"
-    local mesh_script="$5"
-    local mesh_args="$6"
+    local case_name="$1"
+    local case_path="$2"
+    local log_file="$3"
+    local mesh_script="$4"
+    local mesh_args="$5"
 
     {
         echo "=================================================="
@@ -179,9 +174,13 @@ if [ ! -d "$CASE_TEMPLATE" ]; then
 fi
 
 if [ "$ADVANCED" == true ]; then
+    if [ "$AEROPACK" == true ]; then
+        MESH_SCRIPT="mesh_aeropack.py"
+    else
+        MESH_SCRIPT="mesh_advanced_with_bellmouth.py"
+    fi
     OUTPUT_DIR="${SCRIPT_DIR}/outputs/advanced"
     LOG_DIR="${SCRIPT_DIR}/logs/advanced"
-    MESH_SCRIPT="mesh_advanced_with_bellmouth.py"
     MESH_SCRIPT_STRAIGHT="mesh_advanced_no_bellmouth.py"
     MESH_FLAGS="--Kx $Kx --Ky $Ky --t $t --r $r --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
     MESH_FLAGS_STRAIGHT="--xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
@@ -192,6 +191,13 @@ else
     MESH_SCRIPT_STRAIGHT="mesh_straight.py"
     MESH_FLAGS="--Kx $Kx --Ky $Ky --r $r --t $t --L $L --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
     MESH_FLAGS_STRAIGHT="--t $t --L $L --xmin $xmin --ymin $ymin --xmax $xmax --ymax $ymax --nt $nt"
+fi
+
+# Set ELL/AP prefix for advanced/aeropack
+if [ "$AEROPACK" == true ]; then
+    ELL_PREFIX="AP"
+else
+    ELL_PREFIX="ELL"
 fi
 
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
@@ -215,7 +221,7 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
     straight_log_file="${LOG_DIR}/${straight_fname}.log"
 
     if [ ! -d "$straight_case_path" ] || [ "$OVERWRITE" == "true" ]; then
-        run_case "IN" "$straight_fname" "$straight_case_path" "$straight_log_file" "$MESH_SCRIPT_STRAIGHT" "--Mw $Mw $MESH_FLAGS_STRAIGHT"
+        run_case "$straight_fname" "$straight_case_path" "$straight_log_file" "$MESH_SCRIPT_STRAIGHT" "--Mw $Mw $MESH_FLAGS_STRAIGHT"
         ((COUNTER++))
     else
         skip_log_file="${straight_log_file%.log}_skipped.log"
@@ -223,7 +229,7 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
         ((COUNTER++))
     fi
 
-    # Mb loop (ELL-...)
+    # Mb loop (ELL-... or AP-...)
     for Mb in $(seq "$MB_START" "$MB_END"); do
 
         # # Skip if Mw<=3 and Mb>5
@@ -232,8 +238,8 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
         #     continue
         # fi
 
-        fname=$(printf "ELL-%d-%d-%d-%d-%d-%d" \
-            "$Mw" "$Mb" \
+        fname=$(printf "%s-%d-%d-%d-%d-%d-%d" \
+            "$ELL_PREFIX" "$Mw" "$Mb" \
             "$(awk "BEGIN{print int($Kx * 100)}")" \
             "$(awk "BEGIN{print int($Ky * 100)}")" \
             "$(awk "BEGIN{print int($t * 1000)}")" \
@@ -244,7 +250,7 @@ for Mw in $(seq "$MW_START" "$MW_END"); do
         log_file="${LOG_DIR}/${fname}.log"
 
         if [ ! -d "$case_path" ] || [ "$OVERWRITE" == "true" ]; then
-            run_case "ELL" "$fname" "$case_path" "$log_file" "$MESH_SCRIPT" "--Mw $Mw --Mb $Mb $MESH_FLAGS"
+            run_case "$fname" "$case_path" "$log_file" "$MESH_SCRIPT" "--Mw $Mw --Mb $Mb $MESH_FLAGS"
             ((COUNTER++))
         else
             skip_log_file="${log_file%.log}_skipped.log"
