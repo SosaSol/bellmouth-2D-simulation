@@ -87,19 +87,26 @@ if [[ "$RUN_MODE" == "parallel" ]]; then
         decomposePar | tee log.decomposePar
     fi
 
-    echo "[INFO] Running simulation in parallel"
+    # echo "[INFO] Initializing with potentialFoam in parallel"
+    # mpirun -np "$NP" potentialFoam -parallel -initialiseUBCs -writep| tee log.potentialFoam
+    # echo "[INFO] Changing dictionary for parallel run"
+    # changeDictionary -dict system/changeDictionaryDict 
+    echo "[INFO] Running simpleFoam in parallel"
     mpirun -np "$NP" simpleFoam -parallel | tee log.simpleFoam
 
     echo "[INFO] Reconstructing decomposed fields"
     reconstructPar | tee log.reconstructPar
 
-    
     # Remove the processor directories after reconstruction to clean up
     echo "[INFO] Cleaning up processor directories"
     rm -rf processor*
 
 else
-    echo "[INFO] Running simulation in serial"
+    # echo "[INFO] Initializing with potentialFoam in parallel"
+    # potentialFoam -writep| tee log.potentialFoam
+    # echo "[INFO] Changing dictionary for serial run"
+    # changeDictionary -dict system/changeDictionaryDict
+    echo "[INFO] Running simpleFoam in serial"
     simpleFoam | tee log.simpleFoam
 fi
 

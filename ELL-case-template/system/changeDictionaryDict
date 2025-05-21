@@ -1,0 +1,46 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2412                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      changeDictionaryDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+U
+{
+    boundaryField
+    {
+        outlet
+        {
+            type        inletOutlet;
+            inletValue  uniform (0 0 0);
+            value       uniform (0 0 0);
+        }
+    }
+}
+
+p
+{
+    boundaryField
+    {
+        inlet
+        {
+            type            totalPressure;
+            p0              uniform 0;
+        }
+        
+        outlet
+        {
+            type            fixedValue;
+            value           uniform -128;
+        }
+    }
+}
