@@ -5,6 +5,8 @@ postProcessingOutputs/
 
 # Ignore files for multiple and reverse simulation run
 run_all_*
+# Ignore test folders
+test-*
 
 # macOS
 .DS_Store
@@ -32,3 +34,6 @@ env/
 processor*/
 polyMesh/
 log.*
+
+# Ignore log files
+*.log
