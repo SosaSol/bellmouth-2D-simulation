@@ -241,8 +241,8 @@ def main(Mw:int,
 
     # Apply boundary layer
     logging.info("Applying boundary layers...")
-    wall_curve_tags = apply_multiple_boundary_layers(all_edge_points=edge_points, x=L, n_layers=22,
-                                                     y_plus=0.95, U_inf=16, yp_factor=2/7)
+    wall_curve_tags = apply_multiple_boundary_layers(all_edge_points=edge_points, x=L, n_layers=23,
+                                                     y_plus=0.95, U_inf=16, yp_factor=0.21)
     
     # Refine mesh
     Di, = compute_geometry_parameters(Mw)
